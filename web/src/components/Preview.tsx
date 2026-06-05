@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 export default function Preview({ source }: { source?: string }) {
   const storeContent = useStore((s) => s.content);
   const content = source ?? storeContent;
+  const activePath = useStore((s) => s.activePath);
   const openWikilink = useStore((s) => s.openWikilink);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
@@ -66,9 +67,22 @@ export default function Preview({ source }: { source?: string }) {
     });
   };
 
+  // Inline title (note filename), Obsidian-style — skipped when the note already
+  // opens with an H1 equal to the title (avoids duplicating the Trilium heading).
+  const title = !source && activePath ? (activePath.split('/').pop() ?? '').replace(/\.(md|markdown)$/i, '') : '';
+  const firstLine = content
+    .replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, '')
+    .split(/\r?\n/)
+    .find((l) => l.trim() !== '');
+  const h1 = firstLine?.match(/^#\s+(.+?)\s*$/);
+  const showTitle = !!title && !(h1 && h1[1].trim().toLowerCase() === title.trim().toLowerCase());
+
   return (
     <div className="markdown-preview" onClick={onClick} onContextMenu={onContextMenu}>
-      <div className="preview-inner" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="preview-inner">
+        {showTitle && <div className="inline-title">{title}</div>}
+        <div dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
     </div>
   );
 }

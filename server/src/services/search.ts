@@ -31,10 +31,29 @@ export interface SearchHit {
 
 const FIELDS = ['title', 'headings', 'tags', 'path', 'body'] as const;
 
+// Obsidian's built-in properties are always List-typed.
+const CORE_LIST_PROPS = new Set(['tags', 'aliases', 'cssclasses']);
+
+/** Classify a frontmatter value into an Obsidian property type
+ *  (text | list | number | checkbox | date | datetime). */
+function inferPropType(key: string, v: unknown): string {
+  if (CORE_LIST_PROPS.has(key)) return 'list';
+  if (Array.isArray(v)) return 'list';
+  if (typeof v === 'number') return 'number';
+  if (typeof v === 'boolean') return 'checkbox';
+  if (typeof v === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(v)) return 'datetime';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'date';
+  }
+  return 'text';
+}
+
 class QmdEngine {
   private mini: MiniSearch<QmdDoc>;
   private snippets = new Map<string, string>();
   private tagSet = new Map<string, string[]>();
+  // Per-note frontmatter key→type, for the vault-wide property suggestions list.
+  private propMeta = new Map<string, Record<string, string>>();
   private ready = false;
 
   constructor() {
@@ -45,6 +64,10 @@ class QmdEngine {
     return new MiniSearch<QmdDoc>({
       fields: FIELDS as unknown as string[],
       storeFields: ['title', 'path', 'tags'],
+      // Auto-vacuum runs in a deferred task after discard/replace and has crashed
+      // the process on large vaults (TreeIterator.dive → undefined). Disable it;
+      // the index is fully rebuilt on restart, so stale terms never accumulate far.
+      autoVacuum: false,
       searchOptions: {
         boost: { title: 4, headings: 2, tags: 3 },
         prefix: true,
@@ -63,6 +86,9 @@ class QmdEngine {
     const snippet = note.body.replace(/\s+/g, ' ').trim().slice(0, 280);
     this.snippets.set(rel, snippet);
     this.tagSet.set(rel, note.tags);
+    const meta: Record<string, string> = {};
+    for (const [k, v] of Object.entries(note.frontmatter ?? {})) meta[k] = inferPropType(k, v);
+    this.propMeta.set(rel, meta);
     const body = note.body.length > QmdEngine.MAX_BODY ? note.body.slice(0, QmdEngine.MAX_BODY) : note.body;
     return {
       id: rel,
@@ -81,6 +107,7 @@ class QmdEngine {
     this.mini = this.newIndex();
     this.snippets.clear();
     this.tagSet.clear();
+    this.propMeta.clear();
     for (const rel of files) {
       try {
         this.mini.add(await this.toDoc(rel));
@@ -107,6 +134,7 @@ class QmdEngine {
     if (this.mini.has(rel)) this.mini.discard(rel);
     this.snippets.delete(rel);
     this.tagSet.delete(rel);
+    this.propMeta.delete(rel);
   }
 
   async rename(from: string, to: string): Promise<void> {
@@ -148,6 +176,33 @@ class QmdEngine {
       .sort((a, b) => b.count - a.count);
   }
 
+  /** Vault-wide frontmatter property keys (for the property-name suggester). */
+  allProperties(): { key: string; type: string; count: number }[] {
+    const count = new Map<string, number>();
+    const types = new Map<string, Map<string, number>>();
+    // Always offer Obsidian's built-in List properties, even if unused yet.
+    for (const k of CORE_LIST_PROPS) {
+      count.set(k, 0);
+      types.set(k, new Map([['list', 1]]));
+    }
+    for (const meta of this.propMeta.values()) {
+      for (const [k, t] of Object.entries(meta)) {
+        count.set(k, (count.get(k) ?? 0) + 1);
+        const tm = types.get(k) ?? new Map<string, number>();
+        tm.set(t, (tm.get(t) ?? 0) + 1);
+        types.set(k, tm);
+      }
+    }
+    return [...count.entries()]
+      .map(([key, c]) => {
+        let best = 'text';
+        let bn = 0;
+        for (const [t, n] of types.get(key) ?? []) if (n > bn) { bn = n; best = t; }
+        return { key, type: best, count: c };
+      })
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+  }
+
   private async persist(): Promise<void> {
     try {
       await fs.mkdir(config.dataDir, { recursive: true });
@@ -155,6 +210,7 @@ class QmdEngine {
         mini: this.mini.toJSON(),
         snippets: [...this.snippets.entries()],
         tags: [...this.tagSet.entries()],
+        propMeta: [...this.propMeta.entries()],
       };
       await fs.writeFile(INDEX_FILE, JSON.stringify(payload));
     } catch {
@@ -169,9 +225,11 @@ class QmdEngine {
       this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(payload.mini), {
         fields: FIELDS as unknown as string[],
         storeFields: ['title', 'path', 'tags'],
+        autoVacuum: false,
       });
       this.snippets = new Map(payload.snippets);
       this.tagSet = new Map(payload.tags);
+      this.propMeta = new Map(payload.propMeta ?? []);
       this.ready = true;
       return true;
     } catch {

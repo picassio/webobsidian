@@ -11,13 +11,29 @@ import {
   livePreviewState,
   livePreviewTheme,
   frontmatterField,
+  tableField,
+  htmlBlockField,
+  noteTitleField,
+  inlineTitleField,
+  editorClickFix,
   setLivePreviewEnabled,
   setLivePreviewLinkHandler,
+  setLivePreviewMenuHandler,
+  setLivePreviewPropertyProvider,
+  setLivePreviewPropertyTypes,
+  setLivePreviewPropertyTypeSetter,
+  setLivePreviewTagProvider,
+  setNoteTitle,
 } from '../lib/livePreview';
+import { api } from '../lib/api';
+
+const titleOf = (path: string | null) =>
+  path ? (path.split('/').pop() ?? path).replace(/\.(md|markdown)$/i, '') : '';
 
 export default function Editor() {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const applyingExternal = useRef(false);
   const activePath = useStore((s) => s.activePath);
   const content = useStore((s) => s.content);
   const setContent = useStore((s) => s.setContent);
@@ -30,6 +46,25 @@ export default function Editor() {
   useEffect(() => {
     setLivePreviewLinkHandler(openWikilink);
   }, [openWikilink]);
+
+  useEffect(() => {
+    setLivePreviewMenuHandler(openContextMenu);
+    setLivePreviewPropertyProvider(() => api.properties().then((r) => r.properties).catch(() => []));
+    setLivePreviewTagProvider(() => api.tags().then((r) => r.tags.map((t) => t.tag)).catch(() => []));
+  }, [openContextMenu]);
+
+  // Load the vault's property type registry (.obsidian/types.json) once.
+  useEffect(() => {
+    setLivePreviewPropertyTypeSetter((key, type) => api.setPropertyType(key, type).then((r) => r.types));
+    api
+      .propertyTypes()
+      .then((r) => {
+        setLivePreviewPropertyTypes(r.types);
+        const v = view.current;
+        if (v) v.dispatch({ effects: setLivePreviewEnabled.of(v.state.field(livePreviewState)) });
+      })
+      .catch(() => {});
+  }, []);
 
   // --- editor formatting actions (used by the right-click menu) ---
   const wrap = (before: string, after = before) => {
@@ -161,11 +196,17 @@ export default function Editor() {
         ...(isDark ? [oneDark] : [syntaxHighlighting(defaultHighlightStyle)]),
         EditorView.lineWrapping,
         livePreviewState.init(() => isMd && viewMode === 'live'),
+        noteTitleField.init(() => titleOf(activePath)),
+        inlineTitleField,
         frontmatterField,
+        tableField,
+        htmlBlockField,
         livePreviewPlugin,
         livePreviewTheme,
+        editorClickFix,
         EditorView.updateListener.of((u) => {
-          if (u.docChanged) setContent(u.state.doc.toString());
+          // Ignore doc changes we applied programmatically (external content sync)
+          if (u.docChanged && !applyingExternal.current) setContent(u.state.doc.toString());
         }),
       ],
     });
@@ -176,10 +217,31 @@ export default function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePath]);
 
+  // Sync the editor doc when `content` changes from OUTSIDE the editor — e.g. the
+  // active note's content arrives asynchronously after reload/hydrate, or is
+  // pushed by cross-tab sync. (User typing changes content too, but then the doc
+  // already equals content, so this is a no-op.)
+  useEffect(() => {
+    const v = view.current;
+    if (!v) return;
+    const current = v.state.doc.toString();
+    if (current === content) return;
+    applyingExternal.current = true;
+    const fmMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/);
+    const initPos = Math.min(fmMatch ? fmMatch[0].length : 0, content.length);
+    v.dispatch({
+      changes: { from: 0, to: current.length, insert: content },
+      selection: { anchor: initPos },
+    });
+    applyingExternal.current = false;
+  }, [content]);
+
   // Toggle live preview when the view mode changes (without recreating editor).
   useEffect(() => {
     const isMd = activePath ? /\.(md|markdown)$/i.test(activePath) : false;
-    view.current?.dispatch({ effects: setLivePreviewEnabled.of(isMd && viewMode === 'live') });
+    view.current?.dispatch({
+      effects: [setLivePreviewEnabled.of(isMd && viewMode === 'live'), setNoteTitle.of(titleOf(activePath))],
+    });
   }, [viewMode, activePath]);
 
   // Debounced autosave.

@@ -19,13 +19,24 @@ import { gitRouter } from './routes/git.js';
 import { keysRouter } from './routes/keys.js';
 import { pluginsRouter } from './routes/plugins.js';
 import { agentRouter } from './routes/agent.js';
+import { uiStateRouter } from './routes/uistate.js';
 import { initSearch, qmd } from './services/search.js';
 import { buildLinkGraph } from './services/links.js';
 import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js';
+import { setBroadcaster, broadcast } from './services/realtime.js';
 import { getVaultRoot, ensureVault } from './services/vault.js';
 import { startAutoSync } from './services/autosync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Keep the local server alive on stray async errors (e.g. a deferred library task
+// throwing) instead of crashing the whole process — log loudly so bugs aren't hidden.
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
 
 async function main() {
   await loadSettings();
@@ -53,6 +64,7 @@ async function main() {
   app.use('/api/git', gitRouter);
   app.use('/api/keys', keysRouter);
   app.use('/api/plugins', pluginsRouter);
+  app.use('/api/uistate', uiStateRouter);
   app.use('/api', searchRouter); // /api/search, /api/tags, /api/backlinks, /api/graph...
 
   // Static SPA (built into server/public)
@@ -86,20 +98,18 @@ async function main() {
   });
 }
 
-// --- WebSocket: broadcast filesystem change events to connected clients ----
-let broadcast: (msg: unknown) => void = () => {};
-
+// --- WebSocket: broadcast filesystem & UI-state events to connected clients ----
 function setupWebsocket(server: http.Server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
   wss.on('connection', (ws) => {
     ws.send(JSON.stringify({ type: 'hello' }));
   });
-  broadcast = (msg) => {
+  setBroadcaster((msg) => {
     const data = JSON.stringify(msg);
     for (const client of wss.clients) {
       if (client.readyState === 1) client.send(data);
     }
-  };
+  });
 }
 
 // --- chokidar watcher: reflect external changes (git pull, direct edits) ---

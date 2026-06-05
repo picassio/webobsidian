@@ -17,7 +17,9 @@ function parentDir(path: string): string {
 }
 
 function Node({ node, depth }: { node: TreeNode; depth: number }) {
-  const [open, setOpen] = useState(false); // folders start collapsed, like Obsidian
+  const expanded = useStore((s) => s.expanded);
+  const toggleFolder = useStore((s) => s.toggleFolder);
+  const open = expanded.includes(node.path); // persisted across reloads
   const [dropping, setDropping] = useState(false);
   const activePath = useStore((s) => s.activePath);
   const openFile = useStore((s) => s.openFile);
@@ -134,7 +136,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
       <div className="tree-item">
         <div
           className={`tree-row folder ${dropping ? 'drop-target' : ''}`}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => toggleFolder(node.path)}
           onContextMenu={onContext}
           onDragOver={(e) => { e.preventDefault(); setDropping(true); }}
           onDragLeave={() => setDropping(false)}

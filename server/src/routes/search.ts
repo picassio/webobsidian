@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { qmd } from '../services/search.js';
 import { backlinksFor, graphData, resolveLink, buildLinkGraph } from '../services/links.js';
+import { readPropertyTypes, setPropertyType } from '../services/propertytypes.js';
 
 export const searchRouter = Router();
 searchRouter.use(requireAuth);
@@ -20,6 +21,32 @@ searchRouter.get(
   '/tags',
   asyncHandler(async (_req, res) => {
     res.json({ tags: qmd.allTags() });
+  }),
+);
+
+searchRouter.get(
+  '/properties',
+  asyncHandler(async (_req, res) => {
+    res.json({ properties: qmd.allProperties() });
+  }),
+);
+
+searchRouter.get(
+  '/property-types',
+  asyncHandler(async (_req, res) => {
+    res.json({ types: await readPropertyTypes() });
+  }),
+);
+
+searchRouter.post(
+  '/property-types',
+  asyncHandler(async (req, res) => {
+    const { key, type } = req.body ?? {};
+    if (typeof key !== 'string' || typeof type !== 'string') {
+      res.status(400).json({ error: 'key and type required' });
+      return;
+    }
+    res.json({ types: await setPropertyType(key, type) });
   }),
 );
 

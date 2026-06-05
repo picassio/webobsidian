@@ -19,10 +19,13 @@ export interface SearchHit {
 }
 
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
+  const { headers: optHeaders, ...rest } = opts;
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(opts.headers ?? {}) },
-    ...opts,
+    ...rest,
+    // headers MUST be merged last — spreading ...opts after a `headers` literal
+    // would drop Content-Type whenever a caller passes its own headers.
+    headers: { 'Content-Type': 'application/json', ...(optHeaders ?? {}) },
   });
   if (res.status === 401) {
     throw new ApiError('Unauthorized', 401);
@@ -83,12 +86,29 @@ export const api = {
   search: (q: string, limit = 30) =>
     req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   tags: () => req<{ tags: { tag: string; count: number }[] }>('/api/tags'),
+  properties: () =>
+    req<{ properties: { key: string; type: string; count: number }[] }>('/api/properties'),
+  propertyTypes: () => req<{ types: Record<string, string> }>('/api/property-types'),
+  setPropertyType: (key: string, type: string) =>
+    req<{ types: Record<string, string> }>('/api/property-types', {
+      method: 'POST',
+      body: JSON.stringify({ key, type }),
+    }),
   backlinks: (path: string) =>
     req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`),
   resolve: (target: string) =>
     req<{ path: string | null }>(`/api/resolve?target=${encodeURIComponent(target)}`),
   graph: () => req<{ nodes: { id: string; label: string }[]; edges: { source: string; target: string }[] }>('/api/graph'),
   reindex: () => req<{ ok: true }>('/api/reindex', { method: 'POST' }),
+
+  // ui state (workspace persistence, shared across browsers)
+  getUiState: () => req<any>('/api/uistate/'),
+  putUiState: (state: any, clientId: string) =>
+    req<{ ok: true }>('/api/uistate/', {
+      method: 'PUT',
+      headers: { 'X-Client-Id': clientId },
+      body: JSON.stringify(state),
+    }),
 
   // settings
   getSettings: () => req<any>('/api/settings/'),
