@@ -64,22 +64,14 @@ export async function listTree(): Promise<TreeNode> {
           children: await walk(abs),
         });
       } else if (e.isFile()) {
-        let size: number | undefined;
-        let mtime: number | undefined;
-        try {
-          const st = await fs.stat(abs);
-          size = st.size;
-          mtime = st.mtimeMs;
-        } catch {
-          /* ignore */
-        }
+        // No per-file fs.stat() here: with ~27k files it meant 27k syscalls on
+        // every tree fetch (and the tree is refetched on each fs event). The UI
+        // doesn't use size/mtime, so the dirent alone is enough.
         nodes.push({
           name: e.name,
           path: rel,
           type: 'file',
           ext: path.extname(e.name).toLowerCase(),
-          size,
-          mtime,
         });
       }
     }

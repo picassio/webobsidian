@@ -8,7 +8,6 @@ import RightSidebar from './components/RightSidebar';
 import Workspace from './components/Workspace';
 import CommandPalette from './components/CommandPalette';
 import Settings from './components/Settings';
-import GraphView from './components/GraphView';
 import ContextMenu from './components/ContextMenu';
 import { loadPlugins } from './lib/plugins';
 
@@ -102,7 +101,6 @@ export default function App() {
       </div>
       <CommandPalette />
       <Settings />
-      <GraphView />
       <ContextMenu />
       {toast && <div className="toast">{toast}</div>}
     </div>

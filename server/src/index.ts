@@ -21,7 +21,7 @@ import { pluginsRouter } from './routes/plugins.js';
 import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
 import { initSearch, qmd } from './services/search.js';
-import { buildLinkGraph } from './services/links.js';
+import { buildLinkGraph, updateLinkGraphForFile } from './services/links.js';
 import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { getVaultRoot, ensureVault } from './services/vault.js';
@@ -116,19 +116,14 @@ function setupWebsocket(server: http.Server) {
 async function setupWatcher() {
   const root = await getVaultRoot();
   const watcher = chokidar.watch(root, {
-    ignored: (p) => /(^|[/\\])(\.git|node_modules|\.trash)([/\\]|$)/.test(p),
+    // Ignore VCS/dep/trash dirs AND `.obsidian` — the desktop Obsidian app
+    // rewrites its workspace/state files constantly, which otherwise floods the
+    // server with events (→ broadcasts → full tree refetches) and pins the CPU.
+    ignored: (p) => /(^|[/\\])(\.git|\.obsidian|node_modules|\.trash)([/\\]|$)/.test(p),
     ignoreInitial: true,
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
   });
-  // Rebuilding the link graph reads every markdown file, so coalesce bursts of
-  // filesystem events (e.g. a git pull touching thousands of files) into one
-  // rebuild instead of one per file — otherwise large vaults exhaust memory.
-  let linkTimer: NodeJS.Timeout | null = null;
-  const scheduleLinkRebuild = () => {
-    if (linkTimer) clearTimeout(linkTimer);
-    linkTimer = setTimeout(() => void buildLinkGraph().catch(() => {}), 1500);
-  };
 
   const onChange = async (absPath: string, type: string) => {
     const rel = path.relative(root, absPath).split(path.sep).join('/');
@@ -136,9 +131,16 @@ async function setupWatcher() {
     if (type === 'add') indexFile(rel);
     else if (type === 'unlink') unindexFile(rel);
     if (/\.(md|markdown)$/i.test(rel)) {
-      if (type === 'unlink') qmd.remove(rel);
-      else await qmd.upsert(rel).catch(() => {});
-      scheduleLinkRebuild();
+      // Update only the changed file in the search + link indexes (O(1)) — a full
+      // buildLinkGraph() re-reads every note in the vault and was the main CPU sink
+      // when Obsidian touched files in the background.
+      if (type === 'unlink') {
+        qmd.remove(rel);
+        await updateLinkGraphForFile(rel, true).catch(() => {});
+      } else {
+        await qmd.upsert(rel).catch(() => {});
+        await updateLinkGraphForFile(rel).catch(() => {});
+      }
     }
     broadcast({ type: 'fs', event: type, path: rel });
   };

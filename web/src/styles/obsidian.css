@@ -431,9 +431,56 @@ button { font-family: inherit; }
 .cm-wikilink { color: var(--text-accent); cursor: pointer; }
 .cm-wikilink:hover { text-decoration: underline; }
 
-/* Graph */
-.graph-modal { width: 92vw; height: 86vh; max-width: none; max-height: none; }
+/* Graph (lives inside a workspace tab, like Obsidian) */
+.graph-view { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; }
 .graph-canvas-wrap { position: relative; flex: 1; overflow: hidden; background: var(--bg-primary); }
 .graph-canvas-wrap canvas { display: block; }
 .graph-hint { position: absolute; bottom: 10px; left: 12px; font-size: 11px; color: var(--text-faint);
   background: var(--bg-secondary); padding: 4px 10px; border-radius: 12px; pointer-events: none; opacity: .85; }
+
+/* build-error overlay (filters produced an unrenderable graph) */
+.graph-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center;
+  background: var(--bg-secondary); border: 1px solid var(--bg-modifier-border); border-radius: var(--radius);
+  padding: 18px 22px; color: var(--text-muted); font-size: 13px; max-width: 320px; box-shadow: var(--shadow); }
+
+/* floating button to re-open the filters panel */
+.graph-panel-open { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px;
+  display: grid; place-items: center; border: 1px solid var(--bg-modifier-border);
+  background: var(--bg-secondary); color: var(--text-muted); border-radius: var(--radius); cursor: pointer; }
+.graph-panel-open:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
+
+/* filters panel overlay */
+.graph-panel { position: absolute; top: 12px; right: 12px; width: 248px; max-height: calc(100% - 24px);
+  overflow-y: auto; background: var(--bg-secondary); border: 1px solid var(--bg-modifier-border);
+  border-radius: var(--radius); box-shadow: var(--shadow, 0 6px 24px rgba(0,0,0,.18)); padding: 4px; font-size: 13px; }
+.graph-section { border-bottom: 1px solid var(--bg-modifier-border); padding: 6px 8px 10px; }
+.graph-section:last-child { border-bottom: 0; }
+.graph-section-head { display: flex; align-items: center; gap: 2px; margin-bottom: 6px; }
+.graph-section-title { display: flex; align-items: center; gap: 4px; border: 0; background: transparent;
+  color: var(--text-muted); font-weight: 500; font-size: 13px; cursor: pointer; padding: 2px 0; }
+.graph-section-title:hover { color: var(--text-normal); }
+.graph-section-title svg { color: var(--text-faint); }
+.graph-section-body { display: flex; flex-direction: column; gap: 8px; }
+.graph-section-body .text-input { font-size: 12px; padding: 5px 8px; }
+
+.graph-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.graph-row-label { color: var(--text-muted); font-size: 13px; }
+.graph-slider { display: flex; flex-direction: column; gap: 4px; }
+.graph-slider input[type=range] { width: 100%; accent-color: var(--interactive-accent); cursor: pointer; }
+
+/* toggle switch (Obsidian-style pill) */
+.graph-switch { position: relative; width: 34px; height: 18px; border-radius: 10px; border: 0;
+  background: var(--bg-modifier-border); cursor: pointer; flex-shrink: 0; transition: background .15s; padding: 0; }
+.graph-switch.on { background: var(--interactive-accent); }
+.graph-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.graph-switch.on .graph-knob { transform: translateX(16px); }
+
+/* color group rows */
+.graph-group-row { display: flex; align-items: center; gap: 6px; }
+.graph-group-row .text-input { flex: 1; }
+.graph-color { width: 26px; height: 26px; padding: 0; border: 1px solid var(--bg-modifier-border);
+  border-radius: var(--radius-s); background: transparent; cursor: pointer; flex-shrink: 0; }
+.graph-color::-webkit-color-swatch-wrapper { padding: 2px; }
+.graph-color::-webkit-color-swatch { border: 0; border-radius: 3px; }

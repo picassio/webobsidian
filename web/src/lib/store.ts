@@ -6,10 +6,58 @@ export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36
 
 export type ViewMode = 'live' | 'source' | 'reading';
 
+/** Sentinel tab path for the Graph view (it lives in a tab, like Obsidian). */
+export const GRAPH_PATH = 'graph://view';
+
 export interface Tab {
   path: string;
   title: string;
 }
+
+/** A color group in the graph (nodes matching `query` are tinted `color`). */
+export interface GraphGroup {
+  query: string;
+  color: string;
+}
+
+/** Persisted Graph view filters/display/forces — mirrors Obsidian's graph panel. */
+export interface GraphSettings {
+  // filters
+  search: string;
+  tags: boolean;
+  attachments: boolean;
+  existingOnly: boolean;
+  orphans: boolean;
+  // groups
+  groups: GraphGroup[];
+  // display
+  arrows: boolean;
+  textFade: number; // 0..1, higher = labels show at lower zoom
+  nodeSize: number; // 0..1
+  linkThickness: number; // 0..1
+  // forces (all normalized 0..1)
+  centerForce: number;
+  repelForce: number;
+  linkForce: number;
+  linkDistance: number;
+}
+
+export const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
+  search: '',
+  tags: false,
+  attachments: false,
+  existingOnly: false,
+  orphans: true,
+  groups: [],
+  arrows: false,
+  textFade: 0.5,
+  nodeSize: 0.5,
+  linkThickness: 0.5,
+  centerForce: 0.5,
+  repelForce: 0.5,
+  linkForce: 0.5,
+  linkDistance: 0.5,
+};
 
 export interface ContextMenuItem {
   label: string;
@@ -56,6 +104,9 @@ interface AppState {
 
   leftPanel: 'files' | 'search' | 'tags' | 'bookmarks';
   setLeftPanel: (p: 'files' | 'search' | 'tags' | 'bookmarks') => void;
+  /** Query pushed into the search panel (e.g. clicking a tag node in the graph). */
+  searchQuery: string;
+  searchFor: (q: string) => void;
   leftOpen: boolean;
   rightOpen: boolean;
   toggleLeft: () => void;
@@ -66,8 +117,12 @@ interface AppState {
   setPalette: (v: boolean, mode?: 'all' | 'commands' | 'files') => void;
   settingsOpen: boolean;
   setSettings: (v: boolean) => void;
-  graphOpen: boolean;
+  /** Open (true) or close (false) the Graph view tab. */
   setGraph: (v: boolean) => void;
+  openGraph: () => Promise<void>;
+  graphSettings: GraphSettings;
+  setGraphSettings: (patch: Partial<GraphSettings>) => void;
+  resetGraphSettings: () => void;
 
   contextMenu: ContextMenuState | null;
   openContextMenu: (m: ContextMenuState) => void;
@@ -96,7 +151,7 @@ const TEXT_RE = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i;
 // ---- server-side workspace persistence (shared across browsers/devices) ----
 const PERSIST_KEYS = [
   'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath',
-  'recent', 'bookmarks', 'leftPanel', 'leftOpen', 'rightOpen',
+  'recent', 'bookmarks', 'leftPanel', 'leftOpen', 'rightOpen', 'graphSettings',
 ] as const;
 
 function pickPersisted(s: any): Record<string, unknown> {
@@ -117,6 +172,10 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     leftPanel: ['files', 'search', 'tags', 'bookmarks'].includes(s.leftPanel) ? s.leftPanel : 'files',
     leftOpen: s.leftOpen !== false,
     rightOpen: s.rightOpen !== false,
+    graphSettings:
+      s.graphSettings && typeof s.graphSettings === 'object'
+        ? { ...DEFAULT_GRAPH_SETTINGS, ...s.graphSettings }
+        : DEFAULT_GRAPH_SETTINGS,
   });
 }
 
@@ -183,6 +242,8 @@ export const useStore = create<AppState>()(
 
       leftPanel: 'files',
       setLeftPanel: (p) => set({ leftPanel: p, leftOpen: true }),
+      searchQuery: '',
+      searchFor: (q) => set({ searchQuery: q, leftPanel: 'search', leftOpen: true }),
       leftOpen: true,
       rightOpen: true,
       toggleLeft: () => set((s) => ({ leftOpen: !s.leftOpen })),
@@ -193,8 +254,25 @@ export const useStore = create<AppState>()(
       setPalette: (v, mode = 'all') => set({ paletteOpen: v, paletteMode: mode }),
       settingsOpen: false,
       setSettings: (v) => set({ settingsOpen: v }),
-      graphOpen: false,
-      setGraph: (v) => set({ graphOpen: v }),
+      setGraph: (v) => {
+        if (v) get().openGraph();
+        else get().closeTab(GRAPH_PATH);
+      },
+      openGraph: async () => {
+        if (get().dirty) await get().save();
+        set((s) => ({
+          tabs: s.tabs.some((t) => t.path === GRAPH_PATH)
+            ? s.tabs
+            : [...s.tabs, { path: GRAPH_PATH, title: 'Graph view' }],
+          activePath: GRAPH_PATH,
+          content: '',
+          dirty: false,
+        }));
+      },
+      graphSettings: DEFAULT_GRAPH_SETTINGS,
+      setGraphSettings: (patch) =>
+        set((s) => ({ graphSettings: { ...s.graphSettings, ...patch } })),
+      resetGraphSettings: () => set({ graphSettings: DEFAULT_GRAPH_SETTINGS }),
 
       contextMenu: null,
       openContextMenu: (m) => set({ contextMenu: m }),
@@ -207,6 +285,7 @@ export const useStore = create<AppState>()(
       },
 
       openFile: async (path) => {
+        if (path === GRAPH_PATH) return get().openGraph();
         if (get().dirty) await get().save();
         let content = '';
         if (TEXT_RE.test(path)) {

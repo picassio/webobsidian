@@ -98,7 +98,11 @@ export const api = {
     req<{ backlinks: string[] }>(`/api/backlinks?path=${encodeURIComponent(path)}`),
   resolve: (target: string) =>
     req<{ path: string | null }>(`/api/resolve?target=${encodeURIComponent(target)}`),
-  graph: () => req<{ nodes: { id: string; label: string }[]; edges: { source: string; target: string }[] }>('/api/graph'),
+  graph: () =>
+    req<{
+      nodes: { id: string; label: string; kind: 'note' | 'attachment' | 'unresolved'; tags: string[] }[];
+      edges: { source: string; target: string }[];
+    }>('/api/graph'),
   reindex: () => req<{ ok: true }>('/api/reindex', { method: 'POST' }),
 
   // ui state (workspace persistence, shared across browsers)

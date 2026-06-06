@@ -5,7 +5,7 @@ import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import * as vault from '../services/vault.js';
 import { qmd } from '../services/search.js';
-import { buildLinkGraph } from '../services/links.js';
+import { updateLinkGraphForFile } from '../services/links.js';
 import { scheduleAutoCommitOnSave } from '../services/git.js';
 import { resolveFile } from '../services/fileindex.js';
 
@@ -20,10 +20,14 @@ const MIME: Record<string, string> = {
   '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.webm': 'video/webm', '.ico': 'image/x-icon',
 };
 
+const isMd = (p: string) => /\.(md|markdown)$/i.test(p);
+
 // Refresh derived indexes after a mutation (best-effort, non-blocking).
-function reindex(rel?: string) {
-  if (rel) void qmd.upsert(rel).catch(() => {});
-  void buildLinkGraph().catch(() => {});
+// Incremental: only the touched file(s) are reparsed, not the whole vault.
+function reindex(opts: { upsert?: string; added?: string; removed?: string } = {}) {
+  if (opts.upsert) void qmd.upsert(opts.upsert).catch(() => {});
+  if (opts.added && isMd(opts.added)) void updateLinkGraphForFile(opts.added).catch(() => {});
+  if (opts.removed && isMd(opts.removed)) void updateLinkGraphForFile(opts.removed, true).catch(() => {});
   scheduleAutoCommitOnSave();
 }
 
@@ -68,7 +72,7 @@ filesRouter.put(
       return;
     }
     await vault.writeFileText(rel, content);
-    reindex(rel);
+    reindex({ upsert: rel, added: rel });
     res.json({ ok: true, path: rel });
   }),
 );
@@ -112,7 +116,7 @@ filesRouter.patch(
     }
     await vault.rename(from, to);
     await qmd.rename(from, to);
-    reindex();
+    reindex({ added: to, removed: from });
     res.json({ ok: true, from, to });
   }),
 );
@@ -127,7 +131,7 @@ filesRouter.delete(
     }
     const dest = await vault.trash(rel);
     qmd.remove(rel);
-    reindex();
+    reindex({ removed: rel });
     res.json({ ok: true, trashed: dest });
   }),
 );

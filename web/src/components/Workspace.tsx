@@ -1,7 +1,8 @@
-import { useStore } from '../lib/store';
+import { useStore, GRAPH_PATH } from '../lib/store';
 import { api } from '../lib/api';
 import Editor from './Editor';
 import Preview from './Preview';
+import GraphView from './GraphView';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
 
@@ -88,6 +89,9 @@ export default function Workspace() {
             onAuxClick={(e) => e.button === 1 && closeTab(t.path)}
             title={t.path}
           >
+            {t.path === GRAPH_PATH && (
+              <Icon name="graph" size={13} style={{ marginRight: 4, flexShrink: 0 }} />
+            )}
             <span className="title">{t.title.replace(/\.(md|markdown)$/, '')}</span>
             {dirty && activePath === t.path ? (
               <span className="dot">●</span>
@@ -163,7 +167,12 @@ export default function Workspace() {
             </div>
           </div>
         )}
-        {activePath && (
+        {activePath === GRAPH_PATH && (
+          <div className="pane main-pane">
+            <GraphView />
+          </div>
+        )}
+        {activePath && activePath !== GRAPH_PATH && (
           <div className="pane main-pane">
             <EditorPane />
           </div>

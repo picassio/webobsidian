@@ -6,7 +6,13 @@ export default function SearchPanel() {
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const openFile = useStore((s) => s.openFile);
+  const searchQuery = useStore((s) => s.searchQuery);
   const timer = useRef<number>();
+
+  // adopt a query pushed from elsewhere (e.g. clicking a tag node in the graph)
+  useEffect(() => {
+    if (searchQuery) setQ(searchQuery);
+  }, [searchQuery]);
 
   useEffect(() => {
     window.clearTimeout(timer.current);
