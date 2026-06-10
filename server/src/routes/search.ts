@@ -23,8 +23,12 @@ searchRouter.get(
 searchRouter.post(
   '/search/matches',
   asyncHandler(async (req, res) => {
-    const { query, paths, matchCase } = req.body ?? {};
-    const terms = qmd.queryTerms(String(query ?? ''));
+    const { query, paths, matchCase, phrase } = req.body ?? {};
+    // phrase=true → match the whole query as one needle (e.g. unlinked mentions
+    // look for the exact note title, not each word of it).
+    const terms = phrase
+      ? [String(query ?? '').trim()].filter((t) => t.length >= 2)
+      : qmd.queryTerms(String(query ?? ''));
     const list = (Array.isArray(paths) ? paths : []).slice(0, 80).map((p) => String(p));
     const matches = await Promise.all(
       list.map((p) => qmd.matchesFor(p, terms, { caseSensitive: !!matchCase })),

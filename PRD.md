@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 0.2 · Cập nhật: 2026-06-10 · Trạng thái: Draft
+> Phiên bản: 0.3 · Cập nhật: 2026-06-10 · Trạng thái: Draft
+> Changelog 0.3: mở rộng FR-2 theo phản hồi người dùng — (a) menu "More options" (⋯) trên header mỗi pane
+> (Split right/Split down, Copy screenshot cho Graph, Bookmark, Copy public link, Make a copy, Rename/Move/
+> Copy path/Delete, Close tab/Close others) giống Obsidian; (b) Right sidebar đại tu thành tab strip icon
+> (Backlinks · Outgoing links · Tags · Outline) với Linked mentions + **Unlinked mentions** và **Outgoing
+> links** (resolved/unresolved) — trước đó chỉ có 2 panel cố định.
 > Changelog 0.2: thêm FR-10 (deep-link URL `/note/...` + public share link readonly + trang quản lý share tập trung), API `/api/shares` + `/public/shares`, data model `data/shares.json`.
 
 ---
@@ -100,6 +105,15 @@ webobsidian/
 - Live preview / Reading view chuyển đổi.
 - Wikilinks `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, tasks `- [ ]`.
 - Backlinks panel, outline, tag pane.
+- Right sidebar dạng **tab strip icon** (giống Obsidian): Backlinks · Outgoing links · Tags · Outline.
+  - Backlinks: "Linked mentions" (đếm + danh sách) **và** "Unlinked mentions" (note nhắc tên note hiện tại
+    bằng plain text mà chưa link — tìm qua QMD search, loại trừ note đã link).
+  - Outgoing links: mọi wikilink trong note hiện tại, phân biệt resolved/unresolved, click để mở/tạo.
+- Menu **More options (⋯)** trên header mỗi pane (note lẫn Graph view), giống Obsidian:
+  - Note: Split right / Split down, Bookmark, Copy public link, Make a copy, Rename/Move/Copy path/Delete,
+    Close tab / Close other tabs.
+  - Graph view: Copy screenshot (PNG vào clipboard), Close tab.
+  - Split pane hỗ trợ 2 hướng: right (cạnh phải) và down (bên dưới); hướng split persist trong uistate.
 - Graph view (lực đẩy, từ wikilinks).
 
 ### FR-3 · Login gate

@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 
 export default function TagsPanel() {
   const [tags, setTags] = useState<{ tag: string; count: number }[]>([]);
-  const setLeftPanel = useStore((s) => s.setLeftPanel);
+  const searchFor = useStore((s) => s.searchFor);
 
   useEffect(() => {
     api.tags().then((r) => setTags(r.tags)).catch(() => {});
@@ -18,7 +18,7 @@ export default function TagsPanel() {
           key={t.tag}
           className="tag-pill"
           title={`Search #${t.tag}`}
-          onClick={() => setLeftPanel('search')}
+          onClick={() => searchFor(`tag:${t.tag}`)}
         >
           #{t.tag} <span className="count">{t.count}</span>
         </span>

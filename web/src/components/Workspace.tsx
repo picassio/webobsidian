@@ -1,4 +1,4 @@
-import { useStore, GRAPH_PATH } from '../lib/store';
+import { useStore, GRAPH_PATH, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import Editor from './Editor';
 import Preview from './Preview';
@@ -47,12 +47,134 @@ export default function Workspace() {
   const createNote = useStore((s) => s.createNote);
   const goBack = useStore((s) => s.goBack);
   const goForward = useStore((s) => s.goForward);
+  const openContextMenu = useStore((s) => s.openContextMenu);
+  const loadTree = useStore((s) => s.loadTree);
+  const splitDirection = useStore((s) => s.splitDirection);
   const histIndex = useStore((s) => s.histIndex);
   const historyLen = useStore((s) => s.history.length);
   const canGoBack = histIndex > 0;
   const canGoForward = histIndex < historyLen - 1;
 
   const isMd = activePath ? /\.(md|markdown)$/i.test(activePath) : false;
+  const canSplit = activePath ? /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i.test(activePath) : false;
+
+  // Per-pane "More options" (⋯) menu, like Obsidian's pane menu.
+  const openMoreMenu = (e: React.MouseEvent) => {
+    if (!activePath) return;
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const path = activePath;
+    const baseName = path.split('/').pop() ?? path;
+    const closeOthers = () => tabs.filter((t) => t.path !== path).forEach((t) => closeTab(t.path));
+    const tabItems: ContextMenuItem[] = [
+      { label: 'Close tab', icon: 'x', onClick: () => closeTab(path) },
+      { label: 'Close other tabs', onClick: closeOthers },
+    ];
+    let items: ContextMenuItem[];
+    if (path === GRAPH_PATH) {
+      items = [
+        // GraphView owns the Pixi renderer — it listens for this event and
+        // extracts the stage to a PNG (a plain canvas read would be blank).
+        { label: 'Copy screenshot', icon: 'camera', onClick: () => window.dispatchEvent(new CustomEvent('wo-graph-screenshot')) },
+        { label: '', separator: true },
+        ...tabItems,
+      ];
+    } else {
+      items = [
+        ...(canSplit
+          ? [
+              { label: 'Split right', icon: 'columns', onClick: () => openToSide(path, 'right') },
+              { label: 'Split down', icon: 'rows', onClick: () => openToSide(path, 'down') },
+              { label: '', separator: true },
+            ]
+          : []),
+        { label: bookmarks.includes(path) ? 'Remove bookmark' : 'Bookmark', icon: 'bookmark', onClick: () => toggleBookmark(path) },
+        ...(isMd
+          ? [
+              {
+                label: 'Copy public link',
+                icon: 'link',
+                onClick: async () => {
+                  try {
+                    const { share } = await api.createShare(path);
+                    await navigator.clipboard?.writeText(`${location.origin}/share/${share.id}`);
+                    notify('Public link copied');
+                  } catch (err: any) {
+                    notify(`Share failed: ${err.message}`);
+                  }
+                },
+              },
+            ]
+          : []),
+        {
+          label: 'Make a copy',
+          icon: 'file-plus',
+          onClick: async () => {
+            const r = await api.read(path).catch(() => null);
+            if (!r) return;
+            const body = typeof r === 'string' ? r : r.content;
+            const dot = path.lastIndexOf('.');
+            const copyPath = dot > 0 ? `${path.slice(0, dot)} copy${path.slice(dot)}` : `${path} copy`;
+            await api.write(copyPath, body);
+            await loadTree();
+            notify('Made a copy');
+          },
+        },
+        {
+          label: 'Rename…',
+          icon: 'pencil',
+          onClick: async () => {
+            const to = prompt('Rename / move to (vault-relative path):', path);
+            if (to && to !== path) {
+              await api.rename(path, to);
+              closeTab(path);
+              await loadTree();
+              await openFile(to);
+            }
+          },
+        },
+        {
+          label: 'Move file to…',
+          onClick: async () => {
+            const i = path.lastIndexOf('/');
+            const dir = prompt('Move to folder (vault-relative, blank = root):', i < 0 ? '' : path.slice(0, i));
+            if (dir === null) return;
+            const to = dir ? `${dir.replace(/\/$/, '')}/${baseName}` : baseName;
+            if (to !== path) {
+              await api.rename(path, to);
+              closeTab(path);
+              await loadTree();
+              await openFile(to);
+            }
+          },
+        },
+        {
+          label: 'Copy path',
+          onClick: () => {
+            navigator.clipboard?.writeText(path).catch(() => {});
+            notify('Path copied');
+          },
+        },
+        { label: '', separator: true },
+        ...tabItems,
+        { label: '', separator: true },
+        {
+          label: 'Delete',
+          danger: true,
+          icon: 'trash',
+          onClick: async () => {
+            if (confirm(`Move "${baseName}" to trash?`)) {
+              await api.remove(path);
+              closeTab(path);
+              await loadTree();
+              notify('Moved to trash');
+            }
+          },
+        },
+      ];
+    }
+    openContextMenu({ x: Math.round(rect.right) - 220, y: Math.round(rect.bottom) + 6, items });
+  };
 
   // Paste / drop image → upload to attachments and insert an embed.
   const handleFiles = async (files: FileList | File[]) => {
@@ -171,10 +293,13 @@ export default function Workspace() {
               </div>
             </>
           )}
+          <button className="tool-btn" title="More options" onClick={openMoreMenu}>
+            <Icon name="more-horizontal" size={18} />
+          </button>
         </div>
       )}
 
-      <div className="editor-area">
+      <div className={`editor-area ${splitDirection === 'down' ? 'split-down' : ''}`}>
         {!activePath && (
           <div className="empty-state">
             <div>

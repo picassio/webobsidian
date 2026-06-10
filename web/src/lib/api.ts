@@ -109,11 +109,12 @@ export const api = {
     req<{ hits: SearchHit[] }>(
       `/api/search?q=${encodeURIComponent(q)}${limit ? `&limit=${limit}` : ''}`,
     ),
-  // per-note highlighted match contexts for the given paths (lazy, batched)
-  searchMatches: (query: string, paths: string[], matchCase = false) =>
+  // per-note highlighted match contexts for the given paths (lazy, batched);
+  // phrase=true matches the whole query as one needle (unlinked mentions)
+  searchMatches: (query: string, paths: string[], matchCase = false, phrase = false) =>
     req<{ matches: NoteMatches[] }>('/api/search/matches', {
       method: 'POST',
-      body: JSON.stringify({ query, paths, matchCase }),
+      body: JSON.stringify({ query, paths, matchCase, phrase }),
     }),
   tags: () => req<{ tags: { tag: string; count: number }[] }>('/api/tags'),
   properties: () =>

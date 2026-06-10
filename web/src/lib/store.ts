@@ -100,7 +100,9 @@ interface AppState {
   // split pane (open to the side)
   splitPath: string | null;
   splitContent: string;
-  openToSide: (path: string) => Promise<void>;
+  /** Which edge the split pane is docked to ('right' = columns, 'down' = rows). */
+  splitDirection: 'right' | 'down';
+  openToSide: (path: string, direction?: 'right' | 'down') => Promise<void>;
   closeSplit: () => void;
 
   recent: string[];
@@ -109,6 +111,8 @@ interface AppState {
 
   leftPanel: 'files' | 'search' | 'tags' | 'bookmarks';
   setLeftPanel: (p: 'files' | 'search' | 'tags' | 'bookmarks') => void;
+  rightPanel: 'backlinks' | 'outgoing' | 'tags' | 'outline';
+  setRightPanel: (p: 'backlinks' | 'outgoing' | 'tags' | 'outline') => void;
   /** Query pushed into the search panel (e.g. clicking a tag node in the graph). */
   searchQuery: string;
   searchFor: (q: string) => void;
@@ -155,8 +159,8 @@ const TEXT_RE = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i;
 
 // ---- server-side workspace persistence (shared across browsers/devices) ----
 const PERSIST_KEYS = [
-  'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath',
-  'recent', 'bookmarks', 'leftPanel', 'leftOpen', 'rightOpen', 'graphSettings',
+  'tabs', 'activePath', 'viewMode', 'expanded', 'splitPath', 'splitDirection',
+  'recent', 'bookmarks', 'leftPanel', 'rightPanel', 'leftOpen', 'rightOpen', 'graphSettings',
 ] as const;
 
 function pickPersisted(s: any): Record<string, unknown> {
@@ -191,9 +195,11 @@ function applyPersisted(s: any, set: (p: any) => void): void {
     viewMode: ['live', 'source', 'reading'].includes(s.viewMode) ? s.viewMode : 'live',
     expanded: Array.isArray(s.expanded) ? s.expanded : [],
     splitPath: typeof s.splitPath === 'string' ? s.splitPath : null,
+    splitDirection: s.splitDirection === 'down' ? 'down' : 'right',
     recent: Array.isArray(s.recent) ? s.recent : [],
     bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks : [],
     leftPanel: ['files', 'search', 'tags', 'bookmarks'].includes(s.leftPanel) ? s.leftPanel : 'files',
+    rightPanel: ['backlinks', 'outgoing', 'tags', 'outline'].includes(s.rightPanel) ? s.rightPanel : 'backlinks',
     leftOpen: s.leftOpen !== false,
     rightOpen: s.rightOpen !== false,
     graphSettings: migrateGraphSettings(s.graphSettings),
@@ -284,10 +290,15 @@ export const useStore = create<AppState>()(
 
       splitPath: null,
       splitContent: '',
-      openToSide: async (path) => {
+      splitDirection: 'right',
+      openToSide: async (path, direction) => {
         if (!TEXT_RE.test(path)) return;
         const r = await api.read(path);
-        set({ splitPath: path, splitContent: typeof r === 'string' ? r : r.content });
+        set((s) => ({
+          splitPath: path,
+          splitContent: typeof r === 'string' ? r : r.content,
+          splitDirection: direction ?? s.splitDirection,
+        }));
       },
       closeSplit: () => set({ splitPath: null, splitContent: '' }),
 
@@ -302,6 +313,8 @@ export const useStore = create<AppState>()(
 
       leftPanel: 'files',
       setLeftPanel: (p) => set({ leftPanel: p, leftOpen: true }),
+      rightPanel: 'backlinks',
+      setRightPanel: (p) => set({ rightPanel: p, rightOpen: true }),
       searchQuery: '',
       searchFor: (q) => set({ searchQuery: q, leftPanel: 'search', leftOpen: true }),
       leftOpen: true,
