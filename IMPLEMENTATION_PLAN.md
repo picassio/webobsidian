@@ -220,11 +220,25 @@ Cập nhật lần cuối: 2026-06-11
       (5) Reading mode đồng bộ Live: task custom state `[/] [-] [>]`… thành checkbox
       (remark plugin `remarkObsidianTasks`, data-task, chỉ gạch x/X), li bỏ bullet,
       Properties hiện list value dạng pill (tags/aliases)
+- [x] M18.13 Reading mode đồng bộ hoàn toàn với Live (theo phản hồi "Reading khác Live"):
+      tách lib/callouts.ts dùng chung; pipeline remark thêm: remark-breaks (newline = <br>, §7),
+      ==highlight== → <mark>, %%comment%% inline + block bị drop, block id ẩn, tag pill cùng
+      charset editor, math $/$$ → span[data-tex] render KaTeX post-sanitize, mermaid render
+      sau sanitize, callout đúng DOM §20 (icon + title-inner + content, màu theo
+      data-callout→slot CSS, fold +/- click toggle, `-` gập sẵn), wikilink hiển thị
+      `Note > Head` (luật reading §7), ảnh size param. Sửa bug sanitize: defaultSchema ràng
+      buộc a.className (chỉ cho footnote class) làm mất class internal-link/tag — filter bỏ
+      entry mặc định; thêm mark/u vào tagNames
 - [ ] M18.11 Tương lai: MathJax thay KaTeX (glyph parity tuyệt đối), heading/block mode
       suggester (`#`/`#^`), `$$` block nhiều dòng, click tag → search, fold heading/indent,
       chevron fold đặt sau title (hiện đặt trước)
 
 ### Nhật ký tiến độ
+- 2026-06-11 (đợt 4): Reading mode parity với Live — dùng chung callout constants, KaTeX +
+  mermaid + highlight + tag pill + comment strip + breaks:true + callout fold trong Reading.
+  Debug sanitize bằng node repro: a.className bị defaultSchema giới hạn giá trị → filter entry.
+  Verify Reading: 4 tag pill, 2 mark, 8 internal-link, 3 katex, 1 mermaid svg, 1 callout gập,
+  17 icon callout.
 - 2026-06-11 (đợt 3): sửa 4 lỗi editor (HTML table, inline footnote, code block padding +
   indented code guide, embed note title/khoảng trắng) + đồng bộ Reading mode với Live
   (task custom states, bullet, properties pill). Verify cả 2 chế độ bằng screenshot.

@@ -589,14 +589,37 @@ button { font-family: inherit; }
 .cm-props-dd-item:hover { background: var(--bg-modifier-hover); }
 .cm-props-dd-item .prop-icon { color: var(--text-faint); width: 16px; text-align: center; }
 
-/* Callouts */
-.callout { border-radius: var(--radius); padding: 12px 16px; margin: 1em 0;
-  border: 1px solid var(--bg-modifier-border); border-left: 3px solid var(--interactive-accent);
-  background: var(--tag-bg); }
-.callout[data-callout='warning'],.callout[data-callout='caution'] { border-left-color: #e0a800; background: rgba(224,168,0,.08); }
-.callout[data-callout='danger'],.callout[data-callout='error'],.callout[data-callout='bug'] { border-left-color: #e5534b; background: rgba(229,83,75,.08); }
-.callout[data-callout='tip'],.callout[data-callout='success'],.callout[data-callout='info'],.callout[data-callout='note'] { border-left-color: #3a9e54; background: rgba(58,158,84,.08); }
-.callout-title { font-weight: 600; margin-bottom: 4px; }
+/* Callouts (reading view) — same §21 box/colors as Live Preview */
+.callout { --callout-color: var(--callout-default);
+  background: rgba(var(--callout-color), 0.1); mix-blend-mode: var(--highlight-mix-blend-mode);
+  border-radius: var(--radius-s); padding: 12px 12px 12px 24px; margin: 1em 0; }
+.callout-title { display: flex; align-items: center; gap: 6px;
+  color: rgb(var(--callout-color)); font-weight: calc(var(--font-weight) + var(--bold-modifier)); }
+.callout-icon { display: inline-flex; }
+.callout-icon svg { width: 16px; height: 16px; }
+.callout-content > :first-child { margin-top: 0.25em; }
+.callout-content > :last-child { margin-bottom: 0; }
+.callout.is-collapsed .callout-content { display: none; }
+.callout[data-callout-fold='-'] > .callout-title, .callout[data-callout-fold='+'] > .callout-title { cursor: pointer; }
+/* type → color slot mapping (§21) */
+.callout[data-callout='abstract'], .callout[data-callout='summary'], .callout[data-callout='tldr'] { --callout-color: var(--callout-summary); }
+.callout[data-callout='info'] { --callout-color: var(--callout-info); }
+.callout[data-callout='todo'] { --callout-color: var(--callout-todo); }
+.callout[data-callout='important'] { --callout-color: var(--callout-important); }
+.callout[data-callout='tip'], .callout[data-callout='hint'] { --callout-color: var(--callout-tip); }
+.callout[data-callout='success'], .callout[data-callout='check'], .callout[data-callout='done'] { --callout-color: var(--callout-success); }
+.callout[data-callout='question'], .callout[data-callout='help'], .callout[data-callout='faq'] { --callout-color: var(--callout-question); }
+.callout[data-callout='warning'], .callout[data-callout='caution'], .callout[data-callout='attention'] { --callout-color: var(--callout-warning); }
+.callout[data-callout='failure'], .callout[data-callout='fail'], .callout[data-callout='missing'] { --callout-color: var(--callout-fail); }
+.callout[data-callout='danger'], .callout[data-callout='error'] { --callout-color: var(--callout-error); }
+.callout[data-callout='bug'] { --callout-color: var(--callout-bug); }
+.callout[data-callout='example'] { --callout-color: var(--callout-example); }
+.callout[data-callout='quote'], .callout[data-callout='cite'] { --callout-color: var(--callout-quote); }
+/* Tag pills + math in reading view */
+.markdown-preview a.tag { background: var(--tag-bg); color: var(--text-accent); font-size: var(--font-smaller);
+  border-radius: 2em; padding: 0.25em 0.65em; text-decoration: none; }
+.markdown-preview .math.math-block { display: block; text-align: center; padding: 0.5em 0; }
+.markdown-preview .mermaid { text-align: center; padding: 8px 0; }
 
 /* Embedded notes */
 .embed-note { border: 1px solid var(--bg-modifier-border); border-radius: var(--radius); padding: 2px 16px; margin: 12px 0; }

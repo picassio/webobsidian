@@ -1,7 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { renderMarkdown } from '../lib/markdown';
+import { calloutIconSvg } from '../lib/callouts';
 import { api } from '../lib/api';
+
+let katexP: Promise<typeof import('katex')['default']> | null = null;
+const loadKatex = () =>
+  (katexP ??= Promise.all([import('katex'), import('katex/dist/katex.min.css')]).then(([k]) => k.default));
+let mermaidP: Promise<typeof import('mermaid')['default']> | null = null;
+const loadMermaid = () =>
+  (mermaidP ??= import('mermaid').then((m) => {
+    m.default.initialize({
+      startOnLoad: false,
+      theme: document.querySelector('.theme-dark') ? 'dark' : 'default',
+    });
+    return m.default;
+  }));
+let mmdSeq = 0;
 
 export default function Preview({ source }: { source?: string }) {
   const storeContent = useStore((s) => s.content);
@@ -34,13 +49,65 @@ export default function Preview({ source }: { source?: string }) {
     };
   }, [content]);
 
+  // Post-render pass — same renderers as Live Preview so both modes match:
+  // KaTeX for [data-tex] spans, mermaid for ```mermaid fences, callout icons.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root) return;
+    let cancelled = false;
+    for (const el of root.querySelectorAll<HTMLElement>('.callout-icon[data-callout-icon]')) {
+      el.innerHTML = calloutIconSvg(el.dataset.calloutIcon ?? 'default');
+    }
+    if (root.querySelector('[data-tex]')) {
+      void loadKatex().then((katex) => {
+        if (cancelled) return;
+        for (const el of root.querySelectorAll<HTMLElement>('[data-tex]')) {
+          try {
+            katex.render(el.dataset.tex ?? '', el, {
+              throwOnError: false,
+              displayMode: el.dataset.texDisplay === '1',
+            });
+          } catch {
+            /* keep raw tex */
+          }
+        }
+      });
+    }
+    const mmd = root.querySelectorAll<HTMLElement>('pre > code.language-mermaid');
+    if (mmd.length) {
+      void loadMermaid().then(async (mermaid) => {
+        for (const codeEl of mmd) {
+          if (cancelled) return;
+          const pre = codeEl.parentElement!;
+          try {
+            const { svg } = await mermaid.render(`read-mmd-${++mmdSeq}`, codeEl.textContent ?? '');
+            const div = document.createElement('div');
+            div.className = 'mermaid';
+            div.innerHTML = svg;
+            pre.replaceWith(div);
+          } catch {
+            document.getElementById(`dread-mmd-${mmdSeq}`)?.remove();
+          }
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [html]);
+
   const onClick = (e: React.MouseEvent) => {
     const target = (e.target as HTMLElement).closest('[data-wikilink]') as HTMLElement | null;
     if (target) {
       e.preventDefault();
       const link = target.getAttribute('data-wikilink');
       if (link) openWikilink(link);
+      return;
     }
+    // Foldable callout: clicking the title toggles its content.
+    const title = (e.target as HTMLElement).closest('.callout[data-callout-fold="-"] > .callout-title, .callout[data-callout-fold="+"] > .callout-title');
+    if (title) title.parentElement?.classList.toggle('is-collapsed');
   };
 
   const onContextMenu = (e: React.MouseEvent) => {
@@ -81,7 +148,7 @@ export default function Preview({ source }: { source?: string }) {
     <div className="markdown-preview" onClick={onClick} onContextMenu={onContextMenu}>
       <div className="preview-inner">
         {showTitle && <div className="inline-title">{title}</div>}
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+        <div ref={bodyRef} dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </div>
   );
