@@ -334,11 +334,12 @@ button { font-family: inherit; }
 .text-input:focus { border-color: var(--interactive-accent); box-shadow: 0 0 0 2px var(--tag-bg); }
 
 /* --- Search panel --- */
-.search-panel { display: flex; flex-direction: column; }
-/* keep the query box + options pinned while results scroll under them */
+/* Fill the sidebar; the query box stays fixed and only results scroll, so
+   nothing can peek above the box (no sticky-gap artefact). */
+.search-panel { display: flex; flex-direction: column; height: 100%; }
 .search-head {
-  position: sticky; top: 0; z-index: 5; background: var(--bg-secondary);
-  padding: 4px 0 6px; border-bottom: 1px solid var(--bg-modifier-border);
+  flex-shrink: 0; background: var(--bg-secondary);
+  padding: 0 0 6px; border-bottom: 1px solid var(--bg-modifier-border);
 }
 .search-input-wrap {
   display: flex; align-items: center; gap: 2px; padding: 4px 6px;
@@ -390,7 +391,7 @@ button { font-family: inherit; }
 .search-sort-menu button:hover { background: var(--bg-modifier-hover); }
 .search-sort-menu button.active { color: var(--text-accent); }
 
-.search-results { padding-top: 2px; }
+.search-results { flex: 1; min-height: 0; overflow-y: auto; padding-top: 2px; }
 .result { padding: 8px 10px; cursor: pointer; border-radius: var(--radius-s); }
 .result:hover { background: var(--bg-modifier-hover); }
 .result .r-title { font-weight: 600; font-size: 13px; }

@@ -35,6 +35,7 @@ export default function SearchPanel() {
   const searchQuery = useStore((s) => s.searchQuery);
   const timer = useRef<number>();
   const sentinel = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   // adopt a query pushed from elsewhere (e.g. clicking a tag node in the graph)
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function SearchPanel() {
       (entries) => {
         if (entries[0]?.isIntersecting) setVisible((v) => Math.min(v + 50, shown.length));
       },
-      { rootMargin: '300px' },
+      { root: resultsRef.current, rootMargin: '300px' },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -187,7 +188,7 @@ export default function SearchPanel() {
         )}
       </div>
 
-      <div className="search-results">
+      <div className="search-results" ref={resultsRef}>
         {shown.slice(0, visible).map((h) => (
           <div key={h.path} className="result" onClick={() => openFile(h.path)}>
             <div className="r-title">{h.title}</div>
