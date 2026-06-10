@@ -84,16 +84,18 @@ function externalLinkIcon(): SVGElement {
 }
 
 class WikilinkWidget extends WidgetType {
-  constructor(readonly target: string, readonly label: string, readonly embed: boolean) {
+  /** `aria` = default display text, set when an alias overrides it (like Obsidian). */
+  constructor(readonly target: string, readonly label: string, readonly embed: boolean, readonly aria?: string) {
     super();
   }
   eq(o: WikilinkWidget) {
-    return o.target === this.target && o.label === this.label && o.embed === this.embed;
+    return o.target === this.target && o.label === this.label && o.embed === this.embed && o.aria === this.aria;
   }
   toDOM() {
     const a = document.createElement('a');
-    a.className = 'cm-wikilink internal-link' + (this.embed ? ' embed' : '');
+    a.className = 'cm-hmd-internal-link cm-wikilink internal-link' + (this.embed ? ' embed' : '');
     a.textContent = this.label;
+    if (this.aria) a.setAttribute('aria-label', this.aria);
     a.onmousedown = (e) => {
       e.preventDefault();
       openLink(this.target);
@@ -156,20 +158,417 @@ class CheckboxWidget extends WidgetType {
 }
 
 class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string) {
+  /** `width`/`height` from the Obsidian size param `![[img|300]]` / `![[img|300x200]]`. */
+  constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number) {
     super();
   }
   eq(o: ImageWidget) {
-    return o.src === this.src;
+    return o.src === this.src && o.width === this.width && o.height === this.height;
   }
   toDOM() {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-image-wrap';
     const img = document.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
-    img.className = 'cm-embed-image';
-    return img;
+    img.className = 'cm-embed-image image-embed';
+    if (this.width) img.width = this.width;
+    if (this.height) img.height = this.height;
+    // Missing attachment → Obsidian-style "could not be found" box.
+    img.onerror = () => {
+      img.remove();
+      const miss = document.createElement('span');
+      miss.textContent = '';
+      wrap.appendChild(miss);
+      embedNotFound(miss, this.alt);
+    };
+    wrap.appendChild(img);
+    return wrap;
   }
 }
+
+/* ---------------- callouts (§21) ---------------- */
+
+// data-callout type → color/icon slot.
+const CALLOUT_SLOT: Record<string, string> = {
+  note: 'default',
+  abstract: 'summary', summary: 'summary', tldr: 'summary',
+  info: 'info',
+  todo: 'todo',
+  important: 'important',
+  tip: 'tip', hint: 'tip',
+  success: 'success', check: 'success', done: 'success',
+  question: 'question', help: 'question', faq: 'question',
+  warning: 'warning', caution: 'warning', attention: 'warning',
+  failure: 'fail', fail: 'fail', missing: 'fail',
+  danger: 'error', error: 'error',
+  bug: 'bug',
+  example: 'example',
+  quote: 'quote', cite: 'quote',
+};
+
+// Lucide icon paths per slot (same icon family Obsidian ships).
+const CALLOUT_ICON: Record<string, string> = {
+  default: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  summary: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  todo: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  important: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  tip: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  success: '<path d="M20 6 9 17l-5-5"/>',
+  question: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  warning: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  fail: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  error: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  bug: '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>',
+  example: '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>',
+  quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+};
+
+// Callout first-line regex — exact (§7).
+const CALLOUT_RE = /^\[!([^\]]+)\]([+-]?)(?:\s|$)/;
+
+/** Default title: type with `-`→space, first letter capitalized (§7). */
+function calloutDefaultTitle(type: string): string {
+  const t = type.replace(/-/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** Icon (+ optional default title + fold chevron) replacing the `> [!type]` marker. */
+class CalloutHeadWidget extends WidgetType {
+  constructor(
+    readonly slot: string,
+    readonly defaultTitle: string,
+    readonly fold: string, // '', '+', '-'
+    readonly folded: boolean,
+    readonly titleFrom: number,
+  ) {
+    super();
+  }
+  eq(o: CalloutHeadWidget) {
+    return (
+      o.slot === this.slot &&
+      o.defaultTitle === this.defaultTitle &&
+      o.fold === this.fold &&
+      o.folded === this.folded &&
+      o.titleFrom === this.titleFrom
+    );
+  }
+  toDOM(view: EditorView) {
+    const span = document.createElement('span');
+    const icon = document.createElement('span');
+    icon.className = 'cm-callout-icon';
+    icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${
+      CALLOUT_ICON[this.slot] ?? CALLOUT_ICON.default
+    }</svg>`;
+    span.appendChild(icon);
+    if (this.defaultTitle) {
+      const t = document.createElement('span');
+      t.className = 'cm-callout-title';
+      t.textContent = this.defaultTitle;
+      span.appendChild(t);
+    }
+    if (this.fold) {
+      const ch = document.createElement('span');
+      ch.className = 'cm-callout-fold' + (this.folded ? ' is-folded' : '');
+      ch.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+      ch.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        view.dispatch({ effects: toggleCalloutFold.of(this.titleFrom) });
+      });
+      span.appendChild(ch);
+    }
+    return span;
+  }
+  ignoreEvent(e: Event) {
+    return e.type === 'mousedown';
+  }
+}
+
+/* ---------------- math (KaTeX, lazy-loaded like Obsidian's MathJax) ---------------- */
+
+let katexPromise: Promise<typeof import('katex')['default']> | null = null;
+function ensureKatex() {
+  if (!katexPromise) {
+    katexPromise = Promise.all([import('katex'), import('katex/dist/katex.min.css')]).then(
+      ([k]) => k.default,
+    );
+  }
+  return katexPromise;
+}
+
+class MathWidget extends WidgetType {
+  constructor(readonly tex: string, readonly display: boolean) {
+    super();
+  }
+  eq(o: MathWidget) {
+    return o.tex === this.tex && o.display === this.display;
+  }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-math-rendered' + (this.display ? ' math-block' : ' math-inline');
+    span.textContent = this.tex; // shown until KaTeX loads
+    void ensureKatex().then((katex) => {
+      try {
+        katex.render(this.tex, span, { throwOnError: false, displayMode: this.display });
+      } catch {
+        /* keep raw tex */
+      }
+    });
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+class HrWidget extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-hr-widget';
+    span.appendChild(document.createElement('hr'));
+    return span;
+  }
+}
+
+/* ---------------- note embeds (transclusion, like Obsidian ![[note]]) ---------------- */
+
+// Injected from Editor.tsx: resolves a wikilink target and returns rendered,
+// sanitized HTML (api.resolve + renderMarkdown — same pipeline as Reading view).
+let noteEmbedProvider: (target: string) => Promise<{ html: string } | null> = async () => null;
+export function setLivePreviewNoteEmbedProvider(fn: (target: string) => Promise<{ html: string } | null>) {
+  noteEmbedProvider = fn;
+}
+
+function embedNotFound(el: HTMLElement, target: string) {
+  el.classList.add('cm-embed-missing');
+  el.textContent = `"${target}" could not be found.`;
+}
+
+class NoteEmbedWidget extends WidgetType {
+  constructor(readonly target: string) {
+    super();
+  }
+  eq(o: NoteEmbedWidget) {
+    return o.target === this.target;
+  }
+  ignoreEvent() {
+    return true;
+  }
+  toDOM() {
+    const box = document.createElement('div');
+    box.className = 'internal-embed markdown-embed cm-note-embed';
+    const open = document.createElement('span');
+    open.className = 'markdown-embed-link';
+    open.title = 'Open link';
+    open.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+    open.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      openLink(this.target);
+    });
+    // Filename title above the note content, like Obsidian's markdown-embed-title.
+    const title = document.createElement('div');
+    title.className = 'markdown-embed-title';
+    title.textContent = this.target.split('#')[0].split('/').pop() ?? this.target;
+    const content = document.createElement('div');
+    content.className = 'markdown-embed-content markdown-preview';
+    content.textContent = '…';
+    box.append(open, title, content);
+    void noteEmbedProvider(this.target).then((res) => {
+      if (!res) {
+        box.textContent = '';
+        embedNotFound(box, this.target);
+        return;
+      }
+      content.innerHTML = res.html; // sanitized upstream (rehype-sanitize)
+      content.addEventListener('mousedown', (e) => {
+        const a = (e.target as HTMLElement).closest('[data-wikilink]') as HTMLElement | null;
+        if (!a) return;
+        e.preventDefault();
+        const t = a.getAttribute('data-wikilink');
+        if (t) openLink(t);
+      });
+    });
+    return box;
+  }
+}
+
+/* ---------------- mermaid (lazy, like Obsidian) ---------------- */
+
+let mermaidPromise: Promise<typeof import('mermaid')['default']> | null = null;
+function ensureMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((m) => {
+      m.default.initialize({
+        startOnLoad: false,
+        theme: document.querySelector('.theme-dark') ? 'dark' : 'default',
+      });
+      return m.default;
+    });
+  }
+  return mermaidPromise;
+}
+let mermaidSeq = 0;
+
+class MermaidWidget extends WidgetType {
+  constructor(readonly code: string) {
+    super();
+  }
+  eq(o: MermaidWidget) {
+    return o.code === this.code;
+  }
+  ignoreEvent() {
+    return true;
+  }
+  toDOM() {
+    const div = document.createElement('div');
+    div.className = 'mermaid cm-mermaid';
+    div.textContent = '…';
+    void ensureMermaid()
+      .then((mermaid) => mermaid.render(`cm-mmd-${++mermaidSeq}`, this.code))
+      .then(({ svg }) => {
+        div.innerHTML = svg;
+      })
+      .catch((err) => {
+        div.classList.add('mod-error');
+        div.textContent = String(err?.message ?? err);
+        // mermaid leaves an orphaned error element in <body> on parse failure
+        document.getElementById(`dcm-mmd-${mermaidSeq}`)?.remove();
+      });
+    return div;
+  }
+}
+
+function buildMermaid(state: EditorState): DecorationSet {
+  if (!state.field(livePreviewState, false)) return Decoration.none;
+  const doc = state.doc;
+  const ranges: Range<Decoration>[] = [];
+  for (let n = 1; n <= doc.lines; n++) {
+    const line = doc.line(n);
+    const open = line.text.match(/^\s*(`{3,}|~{3,})\s*mermaid\s*$/i);
+    if (!open) continue;
+    let end = -1;
+    for (let j = n + 1; j <= doc.lines; j++) {
+      if (doc.line(j).text.trim().startsWith(open[1][0].repeat(3))) {
+        end = j;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    const from = line.from;
+    const to = doc.line(end).to;
+    let touched = false;
+    for (const r of state.selection.ranges) {
+      if (r.from <= to && r.to >= from) {
+        touched = true;
+        break;
+      }
+    }
+    if (!touched) {
+      const code = end > n + 1 ? doc.sliceString(doc.line(n + 1).from, doc.line(end - 1).to) : '';
+      ranges.push(Decoration.replace({ widget: new MermaidWidget(code), block: true }).range(from, to));
+    }
+    n = end;
+  }
+  return Decoration.set(ranges, true);
+}
+
+export const mermaidField = StateField.define<DecorationSet>({
+  create: (state) => buildMermaid(state),
+  update(value, tr) {
+    if (tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setLivePreviewEnabled))) {
+      return buildMermaid(tr.state);
+    }
+    return value.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/* ---------------- callout folding (`[!type]-` / `[!type]+`) ---------------- */
+
+export const toggleCalloutFold = StateEffect.define<number>();
+
+const QUOTE_LINE_RE = /^ {0,3}>/;
+const QUOTE_MARKERS_RE = /^(?: {0,3}> ?)+/;
+
+/**
+ * Positions (title-line starts) whose fold state the user TOGGLED. The effective
+ * state is `default(- = folded) XOR toggled`, so `[!x]-` callouts are folded by
+ * default no matter when the document content arrives (async load, sync, …).
+ */
+export const calloutFoldState = StateField.define<readonly number[]>({
+  create: () => [],
+  update(value, tr) {
+    let v = tr.docChanged ? value.map((p) => tr.changes.mapPos(p, 1)) : [...value];
+    for (const e of tr.effects) {
+      if (e.is(toggleCalloutFold)) {
+        v = v.includes(e.value) ? v.filter((x) => x !== e.value) : [...v, e.value];
+      }
+    }
+    return v;
+  },
+});
+
+/** Effective fold state of the callout whose title line starts at `titleFrom`. */
+function isCalloutFolded(state: EditorState, titleFrom: number, foldChar: string): boolean {
+  const toggled = (state.field(calloutFoldState, false) ?? []).includes(titleFrom);
+  return (foldChar === '-') !== toggled;
+}
+
+function buildCalloutFolds(state: EditorState): DecorationSet {
+  if (!state.field(livePreviewState, false)) return Decoration.none;
+  const doc = state.doc;
+  const ranges: Range<Decoration>[] = [];
+  let prevIsQuote = false;
+  for (let n = 1; n <= doc.lines; n++) {
+    const line = doc.line(n);
+    const isQuote = QUOTE_LINE_RE.test(line.text);
+    if (isQuote && !prevIsQuote) {
+      const cm = line.text.replace(QUOTE_MARKERS_RE, '').match(CALLOUT_RE);
+      if (cm && cm[2] && isCalloutFolded(state, line.from, cm[2])) {
+        let last = n;
+        while (last < doc.lines && QUOTE_LINE_RE.test(doc.line(last + 1).text)) last++;
+        if (last > n) {
+          const to = doc.line(last).to;
+          // reveal while the caret is inside the callout
+          let touched = false;
+          for (const r of state.selection.ranges) {
+            if (r.from <= to && r.to >= line.from) {
+              touched = true;
+              break;
+            }
+          }
+          if (!touched) ranges.push(Decoration.replace({ block: true }).range(line.to, to));
+          n = last;
+          prevIsQuote = false;
+          continue;
+        }
+      }
+    }
+    prevIsQuote = isQuote;
+  }
+  return Decoration.set(ranges, true);
+}
+
+export const calloutFoldDeco = StateField.define<DecorationSet>({
+  create: (state) => buildCalloutFolds(state),
+  update(value, tr) {
+    if (
+      tr.docChanged ||
+      tr.selection ||
+      tr.effects.some((e) => e.is(toggleCalloutFold) || e.is(setLivePreviewEnabled))
+    ) {
+      return buildCalloutFolds(tr.state);
+    }
+    return value.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 /* ---------------- tables ---------------- */
 
@@ -1221,16 +1620,17 @@ class FrontmatterWidget extends WidgetType {
 
 /* ---------------- helpers ---------------- */
 
-const HEADING_CLASS: Record<string, string> = {
-  ATXHeading1: 'cm-h1', ATXHeading2: 'cm-h2', ATXHeading3: 'cm-h3',
-  ATXHeading4: 'cm-h4', ATXHeading5: 'cm-h5', ATXHeading6: 'cm-h6',
+// Obsidian line/span classes (§20): HyperMD-header-N lines, cm-header-N spans.
+const HEADING_LEVEL: Record<string, number> = {
+  ATXHeading1: 1, ATXHeading2: 2, ATXHeading3: 3,
+  ATXHeading4: 4, ATXHeading5: 5, ATXHeading6: 6,
 };
 
 const EMPHASIS_CLASS: Record<string, string> = {
   StrongEmphasis: 'cm-strong',
   Emphasis: 'cm-em',
-  InlineCode: 'cm-code',
-  Strikethrough: 'cm-strike',
+  InlineCode: 'cm-inline-code cm-code',
+  Strikethrough: 'cm-strikethrough cm-strike',
 };
 
 const hidden = Decoration.replace({});
@@ -1264,6 +1664,26 @@ function buildDecorations(view: EditorView): DecorationSet {
     const line = doc.lineAt(pos);
     return touches(line.from, line.to);
   };
+
+  const total = doc.lines;
+  // Block comments: standalone `%%` fence lines toggle a commented region (§7).
+  const commentLines = new Set<number>();
+  {
+    let open = -1;
+    for (let n = 1; n <= total; n++) {
+      if (doc.line(n).text.trim() === '%%') {
+        if (open < 0) {
+          open = n;
+        } else {
+          for (let k = open; k <= n; k++) commentLines.add(k);
+          open = -1;
+        }
+      }
+    }
+  }
+  // Frontmatter range (rendered by frontmatterField) — the regex passes skip it.
+  const fmMatch = doc.sliceString(0, Math.min(doc.length, 4000)).match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/);
+  const fmEnd = fmMatch ? fmMatch[0].length : 0;
 
   // Tables are rendered as block widgets by `tableField`. When a table is shown
   // (selection not inside it) the plugin must NOT decorate inside its range, or
@@ -1304,13 +1724,64 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Don't decorate inside a rendered table/HTML block — their fields own it.
         if (renderedTable(node.from, node.to) || renderedHtml(node.from, node.to)) return;
 
+        // Code block lines: HyperMD-codeblock(-begin/-end) like Obsidian.
+        // The ``` fences are concealed while the caret is outside the block.
+        // Indented code (4 spaces): mono font, NO background — just the indent
+        // guide on the leading unit, like Obsidian.
+        if (name === 'CodeBlock') {
+          const first = doc.lineAt(node.from).number;
+          const last = doc.lineAt(Math.min(node.to, doc.length)).number;
+          for (let i = first; i <= last; i++) {
+            const l = doc.line(i);
+            all.push(Decoration.line({ class: 'HyperMD-codeblock' }).range(l.from, l.from));
+            const ws = l.text.match(/^(\t| {4})/);
+            if (ws) all.push(Decoration.mark({ class: 'cm-indent' }).range(l.from, l.from + ws[1].length));
+          }
+          return;
+        }
+
+        if (name === 'FencedCode') {
+          const first = doc.lineAt(node.from).number;
+          const last = doc.lineAt(Math.min(node.to, doc.length)).number;
+          const blockTouched = touches(node.from, Math.min(node.to, doc.length));
+          // language from the fence info-string (§7) → flair label top-right
+          const lang = doc.line(first).text.match(/^\s*(?:`{3,}|~{3,})[ \t]*([\w/+#-]*)/)?.[1] ?? '';
+          for (let i = first; i <= last; i++) {
+            const l = doc.line(i);
+            const isFence = /^\s*(`{3,}|~{3,})/.test(l.text);
+            all.push(
+              Decoration.line({
+                class:
+                  'HyperMD-codeblock HyperMD-codeblock-bg' +
+                  (i === first ? ' HyperMD-codeblock-begin' : '') +
+                  (i === last ? ' HyperMD-codeblock-end' : ''),
+                attributes: i === first && lang ? { 'data-lang': lang } : undefined,
+              }).range(l.from, l.from),
+            );
+            if (!blockTouched && isFence && (i === first || i === last) && l.to > l.from) {
+              pushReplace(l.from, l.to, hidden);
+            }
+          }
+          return;
+        }
+
         // Headings: size the line; conceal "# " unless caret on the line.
-        if (HEADING_CLASS[name]) {
+        if (HEADING_LEVEL[name]) {
           const line = doc.lineAt(node.from);
-          all.push(Decoration.line({ class: HEADING_CLASS[name] }).range(line.from, line.from));
-          if (!lineActive(node.from)) {
-            const m = doc.sliceString(line.from, line.to).match(/^(#{1,6}\s+)/);
-            if (m) pushReplace(line.from, line.from + m[1].length, hidden);
+          const lv = HEADING_LEVEL[name];
+          all.push(
+            Decoration.line({ class: `cm-h${lv} HyperMD-header HyperMD-header-${lv}` }).range(line.from, line.from),
+          );
+          const m = doc.sliceString(line.from, line.to).match(/^(#{1,6}\s+)/);
+          if (m) {
+            if (!lineActive(node.from)) pushReplace(line.from, line.from + m[1].length, hidden);
+            else
+              all.push(
+                Decoration.mark({ class: 'cm-formatting cm-formatting-header' }).range(
+                  line.from,
+                  line.from + m[1].length,
+                ),
+              );
           }
           return;
         }
@@ -1341,33 +1812,137 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       // Skip lines covered by a rendered table / HTML block widget.
       if (renderedTable(line.from, line.to) || renderedHtml(line.from, line.to)) continue;
+      // Skip the frontmatter block (rendered by frontmatterField).
+      if (line.to <= fmEnd) continue;
+      // Skip lines fully inside code (fences) — bullets/tags there are literal.
+      if (codeRanges.some((r) => r.from <= line.from && r.to >= line.to)) continue;
+      // Whole-line %% block comment region → grey out, keep raw.
+      if (commentLines.has(ln)) {
+        all.push(Decoration.line({ class: 'cm-comment' }).range(line.from, line.from));
+        continue;
+      }
 
-      // Blockquote / callout
-      const cq = text.match(/^(>\s?)(\[!(\w+)\][ \t]*)?(.*)$/);
-      if (text.startsWith('>') && cq) {
-        const calloutType = cq[3]?.toLowerCase();
-        all.push(
-          Decoration.line({ class: calloutType ? `cm-callout cm-callout-${calloutType}` : 'cm-blockquote' }).range(line.from, line.from),
-        );
-        if (!lineActive(line.from)) {
-          const markLen = cq[1].length + (cq[2]?.length ?? 0);
-          pushReplace(line.from, line.from + markLen, hidden);
+      // Inline-HTML paragraph line (e.g. `<u>…</u> và <mark>…`): Lezer only marks
+      // block-level openers as HTMLBlock, so render whole-line inline HTML here.
+      if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from)) {
+        pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text) }));
+        continue;
+      }
+
+      // Horizontal rule: `---` / `***` / `___` → <hr> when the caret is elsewhere.
+      if (/^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(text) && !inCode(line.from, line.to)) {
+        all.push(Decoration.line({ class: 'HyperMD-hr' }).range(line.from, line.from));
+        if (!lineActive(line.from) && line.to > line.from) {
+          pushReplace(line.from, line.to, Decoration.replace({ widget: new HrWidget() }));
+        }
+        continue;
+      }
+
+      // Blockquote / callout (callout regex + colors/icons per §7/§21).
+      // `bodyStart` = offset past the `>` markers so list/task handling below
+      // also works INSIDE quotes and callouts.
+      let bodyStart = 0;
+      if (QUOTE_LINE_RE.test(text)) {
+        const prefix = text.match(QUOTE_MARKERS_RE)![0];
+        const depth = (prefix.match(/>/g) ?? []).length;
+        bodyStart = prefix.length;
+        // First/last line of this contiguous quote run
+        let firstLn = ln;
+        while (firstLn > 1 && QUOTE_LINE_RE.test(doc.line(firstLn - 1).text)) firstLn--;
+        let lastLn = ln;
+        while (lastLn < total && QUOTE_LINE_RE.test(doc.line(lastLn + 1).text)) lastLn++;
+        const titleLineFrom = doc.line(firstLn).from;
+        const firstInner = doc.line(firstLn).text.replace(QUOTE_MARKERS_RE, '');
+        const cm = firstInner.match(CALLOUT_RE);
+        if (cm) {
+          const type = cm[1].split('|')[0].trim().toLowerCase().replace(/\s+/g, '-');
+          const slot = CALLOUT_SLOT[type] ?? 'default';
+          const attributes = { style: `--callout-color: var(--callout-${slot})` };
+          const folded = cm[2] ? isCalloutFolded(view.state, titleLineFrom, cm[2]) : false;
+          all.push(
+            Decoration.line({
+              class:
+                'cm-callout cm-callout-line' +
+                (ln === firstLn ? ' cm-callout-first' : '') +
+                (ln === lastLn || (ln === firstLn && folded) ? ' cm-callout-last' : ''),
+              attributes,
+            }).range(line.from, line.from),
+          );
+          if (ln === firstLn) {
+            const markLen = bodyStart + cm[0].length;
+            const title = text.slice(markLen).trim();
+            if (!lineActive(line.from)) {
+              pushReplace(
+                line.from,
+                line.from + markLen,
+                Decoration.replace({
+                  widget: new CalloutHeadWidget(
+                    slot,
+                    title ? '' : calloutDefaultTitle(type),
+                    cm[2],
+                    folded,
+                    titleLineFrom,
+                  ),
+                }),
+              );
+            }
+            if (title) {
+              all.push(Decoration.mark({ class: 'cm-callout-title' }).range(line.from + markLen, line.to));
+            }
+            bodyStart = markLen; // list handling applies to the rest of the title line
+          } else if (!lineActive(line.from)) {
+            pushReplace(line.from, line.from + bodyStart, hidden);
+          }
+        } else {
+          // Plain quote: depth via background bars (data-quote-depth) — nested
+          // `> >` renders one bar per level like Obsidian.
+          all.push(
+            Decoration.line({
+              class: 'cm-blockquote HyperMD-quote',
+              attributes: { 'data-quote-depth': String(Math.min(depth, 3)) },
+            }).range(line.from, line.from),
+          );
+          if (!lineActive(line.from)) {
+            pushReplace(line.from, line.from + bodyStart, hidden);
+          }
         }
       }
 
-      // Task checkbox + bullet
-      const task = text.match(/^(\s*)([-*+])\s+\[([ xX])\]\s/);
+      // Task checkbox + bullet — applied to the line body (works in quotes /
+      // callouts too). Per §7 any single char is a valid status and any
+      // non-space status counts as checked (no hard-coded custom-state list).
+      const body = bodyStart ? text.slice(bodyStart) : text;
+      const bodyFrom = line.from + bodyStart;
+      // Indentation guides for nested lists (one cm-indent per tab / 4-space unit).
+      const indentGuides = (ws: string) => {
+        let i = 0;
+        while (i < ws.length) {
+          const end = Math.min(i + (ws[i] === '\t' ? 1 : 4), ws.length);
+          all.push(Decoration.mark({ class: 'cm-indent' }).range(bodyFrom + i, bodyFrom + end));
+          i = end;
+        }
+      };
+      const task = body.match(/^(\s*)([-*+])\s+\[(.)\]\s/);
       if (task) {
-        const boxPos = line.from + task[1].length + task[2].length + 2;
+        all.push(
+          Decoration.line({
+            class: 'HyperMD-list-line HyperMD-task-line',
+            attributes: { 'data-task': task[3] },
+          }).range(line.from, line.from),
+        );
+        indentGuides(task[1]);
+        const boxPos = bodyFrom + task[1].length + task[2].length + 2;
         if (!touches(line.from, boxPos + 2)) {
-          pushReplace(line.from + task[1].length, boxPos + 2, Decoration.replace({ widget: new CheckboxWidget(task[3].toLowerCase() === 'x', boxPos) }));
+          pushReplace(bodyFrom + task[1].length, boxPos + 2, Decoration.replace({ widget: new CheckboxWidget(task[3] !== ' ', boxPos) }));
         }
       } else {
-        const bullet = text.match(/^(\s*)([-*+])(\s+)/);
+        const bullet = body.match(/^(\s*)([-*+])(\s+)/);
         if (bullet) {
+          all.push(Decoration.line({ class: 'HyperMD-list-line' }).range(line.from, line.from));
+          indentGuides(bullet[1]);
           // Replace the `-`/`*`/`+` marker with a bullet and collapse its trailing
           // whitespace to a single space, so `-   Item` reads `• Item` like Obsidian.
-          const start = line.from + bullet[1].length;
+          const start = bodyFrom + bullet[1].length;
           const markerEnd = start + 1;
           const spaceEnd = markerEnd + bullet[3].length;
           if (!touches(start, spaceEnd)) {
@@ -1376,37 +1951,167 @@ function buildDecorations(view: EditorView): DecorationSet {
           }
         } else {
           // Ordered list: keep the `1.` but collapse extra spaces after it.
-          const ol = text.match(/^(\s*)(\d{1,9}[.)])(\s+)/);
-          if (ol && ol[3].length > 1) {
-            const markerEnd = line.from + ol[1].length + ol[2].length;
-            const spaceEnd = markerEnd + ol[3].length;
-            if (!touches(line.from + ol[1].length, spaceEnd)) pushReplace(markerEnd + 1, spaceEnd, hidden);
+          const ol = body.match(/^(\s*)(\d{1,9}[.)])(\s+)/);
+          if (ol) {
+            all.push(Decoration.line({ class: 'HyperMD-list-line' }).range(line.from, line.from));
+            indentGuides(ol[1]);
+            if (ol[3].length > 1) {
+              const markerEnd = bodyFrom + ol[1].length + ol[2].length;
+              const spaceEnd = markerEnd + ol[3].length;
+              if (!touches(bodyFrom + ol[1].length, spaceEnd)) pushReplace(markerEnd + 1, spaceEnd, hidden);
+            }
           }
         }
       }
 
-      // Inline tags → pill styling (#tag)
-      const tagRe = /(^|\s)(#[A-Za-z0-9_][\w/-]*)/g;
+      // Inline tags → pill styling. Charset per §7; an editor tag must contain a
+      // letter and a pure-number tag (#123) is not a tag.
+      const tagRe = /(^|\s)(#[^ -⁯⸀-⹿'!"#$%&()*+,.:;<=>?@^`{|}~[\]\\\s]+)/g;
       let tm: RegExpExecArray | null;
       while ((tm = tagRe.exec(text))) {
+        const tag = tm[2];
+        if (/^#\d+$/.test(tag) || !/[a-z]/i.test(tag)) continue;
         const s = line.from + tm.index + tm[1].length;
-        if (inCode(s, s + tm[2].length)) continue;
-        all.push(Decoration.mark({ class: 'cm-tag' }).range(s, s + tm[2].length));
+        if (inCode(s, s + tag.length)) continue;
+        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-begin cm-tag' }).range(s, s + 1));
+        all.push(Decoration.mark({ class: 'cm-hashtag cm-hashtag-end cm-tag' }).range(s + 1, s + tag.length));
       }
 
-      // Wikilinks / embeds
-      const wikiRe = /(!?)\[\[([^\]]+?)\]\]/g;
+      // Footnote definition `[^1]: text` → superscript marker, brackets concealed.
+      const fdef = text.match(/^\[\^([^\]\s]+)\]:/);
+      if (fdef) {
+        all.push(Decoration.line({ class: 'HyperMD-footnote' }).range(line.from, line.from));
+        all.push(Decoration.mark({ class: 'cm-footref' }).range(line.from + 2, line.from + 2 + fdef[1].length));
+        if (!lineActive(line.from)) {
+          pushReplace(line.from, line.from + 2, hidden);
+          const close = line.from + 2 + fdef[1].length;
+          pushReplace(close, close + 2, hidden);
+        }
+      }
+
+      // ==Highlight== → <mark>-style; conceal the markers when the caret is outside.
+      const hlRe = /==(?![\s=])(.+?)==/g;
       let m: RegExpExecArray | null;
+      while ((m = hlRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        all.push(Decoration.mark({ class: 'cm-highlight' }).range(s + 2, e - 2));
+        if (!touches(s, e)) {
+          pushReplace(s, s + 2, hidden);
+          pushReplace(e - 2, e, hidden);
+        } else {
+          all.push(Decoration.mark({ class: 'cm-formatting cm-formatting-highlight' }).range(s, s + 2));
+          all.push(Decoration.mark({ class: 'cm-formatting cm-formatting-highlight' }).range(e - 2, e));
+        }
+      }
+
+      // %%Comment%% — greyed out (dropped from reading view, visible faint in editor).
+      const cmtRe = /%%(.+?)%%/g;
+      while ((m = cmtRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        all.push(Decoration.mark({ class: 'cm-comment' }).range(s, e));
+      }
+
+      // $$Display math$$ (single-line) — rendered via KaTeX when the caret is outside.
+      const dmathRe = /\$\$(.+?)\$\$/g;
+      while ((m = dmathRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        if (!touches(s, e)) pushReplace(s, e, Decoration.replace({ widget: new MathWidget(m[1], true) }));
+        else all.push(Decoration.mark({ class: 'cm-math' }).range(s, e));
+      }
+
+      // Inline $math$ — open not followed by space, close not preceded by space (§7).
+      const mathRe = /(?<![$\\])\$(?![\s$])((?:\\\$|[^$\n])+?)(?<![\s\\])\$(?!\d|\$)/g;
+      while ((m = mathRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        if (!touches(s, e)) pushReplace(s, e, Decoration.replace({ widget: new MathWidget(m[1], false) }));
+        else all.push(Decoration.mark({ class: 'cm-math' }).range(s, e));
+      }
+
+      // Footnote refs [^id] (not a definition) → superscript.
+      const fnRe = /\[\^([^\]\s]+)\](?!:)/g;
+      while ((m = fnRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        all.push(Decoration.mark({ class: 'cm-footref' }).range(s, e));
+      }
+
+      // Inline footnote ^[note] → superscript styling for the whole token (§7).
+      const ifnRe = /\^\[([^\]]+)\]/g;
+      while ((m = ifnRe.exec(text))) {
+        const s = line.from + m.index;
+        const e = s + m[0].length;
+        if (inCode(s, e)) continue;
+        all.push(Decoration.mark({ class: 'cm-footref' }).range(s, e));
+      }
+
+      // Trailing block id ` ^abc-123` (charset [a-zA-Z0-9-] only, §7).
+      const bid = text.match(/(^|\s)(\^[a-zA-Z0-9-]+)$/);
+      if (bid) {
+        const s = line.to - bid[2].length;
+        all.push(Decoration.mark({ class: 'cm-blockid' }).range(s, line.to));
+      }
+
+      // Bare URLs → styled like links (Obsidian cm-url).
+      const urlRe = /(^|[\s(<])((?:https?|ftp):\/\/[^\s<>)"']+)/g;
+      while ((m = urlRe.exec(text))) {
+        const s = line.from + m.index + m[1].length;
+        const e = s + m[2].length;
+        if (inCode(s, e)) continue;
+        all.push(Decoration.mark({ class: 'cm-url' }).range(s, e));
+      }
+
+      // Wikilinks / embeds — alias after the FIRST `|`; default display text
+      // `href.split('#').filter(Boolean).join(' > ')`; nested `[[` rejected (§7).
+      const wikiRe = /(!?)\[\[(.+?)\]\]/g;
       while ((m = wikiRe.exec(text))) {
         const s = line.from + m.index;
         const e = s + m[0].length;
         if (touches(s, e) || inCode(s, e)) continue;
-        const [target, alias] = m[2].split('|');
+        const inner = m[2];
+        if (inner.includes('[[')) continue;
         const isEmbed = m[1] === '!';
-        if (isEmbed && /\.(png|jpe?g|gif|svg|webp)$/i.test(target.trim())) {
-          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(target.trim()), target) }));
+        const pi = inner.indexOf('|');
+        const href = (pi > 0 ? inner.slice(0, pi) : inner)
+          .replace(/\\$/, '')
+          .replace(/ /g, ' ')
+          .trim()
+          .normalize('NFC');
+        const alias = pi > 0 ? inner.slice(pi + 1).trim() : null;
+        const defaultDisplay = href.split('#').filter(Boolean).join(' > ');
+        if (isEmbed && /\.(bmp|png|jpe?g|gif|svg|webp|avif)$/i.test(href)) {
+          // image size param: the LAST `|` segment, `300` or `300x200`
+          let w: number | undefined;
+          let h: number | undefined;
+          if (pi > 0) {
+            const segs = inner.split('|');
+            const sm = segs[segs.length - 1].match(/^\s*([0-9]+)\s*(?:x\s*([0-9]+)\s*)?$/);
+            if (sm) {
+              w = Number(sm[1]);
+              h = sm[2] ? Number(sm[2]) : undefined;
+            }
+          }
+          pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(attachmentUrl(href), href, w, h) }));
+        } else if (isEmbed && !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0])) {
+          // `![[note]]` (no binary extension) → real transclusion like Obsidian.
+          pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href) }));
         } else {
-          pushReplace(s, e, Decoration.replace({ widget: new WikilinkWidget(target.trim(), (alias ?? target).trim(), isEmbed) }));
+          // LP shows the raw target text (`Note#Head`); the `Note > Head` display
+          // form is reading-view behaviour and goes into aria-label like Obsidian.
+          const label = alias || href;
+          pushReplace(
+            s,
+            e,
+            Decoration.replace({ widget: new WikilinkWidget(href, label, isEmbed, defaultDisplay !== label ? defaultDisplay : undefined) }),
+          );
         }
       }
 
@@ -1433,6 +2138,20 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (touches(s, e) || inCode(s, e)) continue;
         const url = m[2].replace(/\s+"[^"]*"$/, '').trim();
         pushReplace(s, e, Decoration.replace({ widget: new MdLinkWidget(m[1], url) }));
+      }
+
+      // Markdown escapes `\.` `\*` … — conceal the backslash like Obsidian LP
+      // (e.g. Trilium/turndown exports escape `2\.` to avoid list parsing).
+      // MUST run LAST: pushReplace's overlap guard would otherwise block math/
+      // link widgets whose range contains an escape (e.g. `\,` inside $$…$$).
+      if (!lineActive(line.from)) {
+        const escRe = /\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/g;
+        let em: RegExpExecArray | null;
+        while ((em = escRe.exec(text))) {
+          const s = line.from + em.index;
+          if (inCode(s, s + 2)) continue;
+          pushReplace(s, s + 1, hidden);
+        }
       }
     }
   }
@@ -1628,44 +2347,32 @@ export const editorClickFix = EditorView.domEventHandlers({
 });
 
 export const livePreviewTheme = EditorView.baseTheme({
-  '.cm-h1': { fontSize: '1.9em', fontWeight: '700', lineHeight: '1.3' },
-  '.cm-h2': { fontSize: '1.55em', fontWeight: '700', lineHeight: '1.3' },
-  '.cm-h3': { fontSize: '1.3em', fontWeight: '700' },
-  '.cm-h4': { fontSize: '1.15em', fontWeight: '700' },
-  '.cm-h5': { fontSize: '1.05em', fontWeight: '700' },
-  '.cm-h6': { fontSize: '1em', fontWeight: '700', opacity: '0.85' },
-  // CodeMirror's default highlight style underlines heading tokens — Obsidian
-  // headings are bold, not underlined. Strip the underline from heading content.
+  // Heading sizes/weights come from the stylesheet (.cm-s-obsidian .HyperMD-header-N,
+  // §19 tokens). The theme only strips CodeMirror's default heading underline.
   '.cm-h1, .cm-h2, .cm-h3, .cm-h4, .cm-h5, .cm-h6': { textDecoration: 'none' },
   '.cm-h1 span, .cm-h2 span, .cm-h3 span, .cm-h4 span, .cm-h5 span, .cm-h6 span': {
     textDecoration: 'none !important',
   },
+  // Inline title = h1 alias (§19).
   '.cm-inline-title': {
-    fontSize: '1.9em',
-    fontWeight: '800',
-    lineHeight: '1.2',
+    fontSize: 'var(--h1-size)',
+    fontWeight: 'var(--h1-weight)',
+    lineHeight: 'var(--line-height-tight)',
+    letterSpacing: '-0.015em',
     color: 'var(--text-normal)',
-    margin: '8px 0 4px',
+    margin: '0 0 0.5em',
     padding: '0',
   },
-  '.cm-strong': { fontWeight: '700' },
   '.cm-em': { fontStyle: 'italic' },
   '.cm-strike': { textDecoration: 'line-through' },
   '.cm-code': {
     fontFamily: 'var(--font-mono)',
-    background: 'var(--bg-secondary)',
+    background: 'var(--background-primary-alt)',
     borderRadius: '4px',
     padding: '0.5px 4px',
-    fontSize: '0.88em',
+    fontSize: 'var(--font-smaller)',
   },
   '.cm-bullet': { color: 'var(--text-faint)' },
-  '.cm-tag': {
-    background: 'var(--tag-bg)',
-    color: 'var(--text-accent)',
-    borderRadius: '12px',
-    padding: '1px 8px',
-    fontSize: '0.85em',
-  },
   // Links: accent-coloured and underlined like Obsidian. `inline-block` gives the
   // browser a soft-wrap opportunity after the widget, so text glued to `]]` in the
   // source (e.g. `]]and`) can still wrap onto the next line as it does in Obsidian.
@@ -1694,22 +2401,13 @@ export const livePreviewTheme = EditorView.baseTheme({
   '.cm-properties': { margin: '4px 0 18px' },
   // Compound `.cm-line.cm-blockquote` selector beats CodeMirror's own `.cm-line`
   // padding rule (equal specificity, declared later) so the gap actually applies —
-  // otherwise text sits flush against the bar.
+  // otherwise text sits flush against the bar. Blockquote: 2px accent bar +
+  // 24px padding (§19). Callout colors live in obsidian.css (--callout-* slots).
   '.cm-line.cm-blockquote': {
-    borderLeft: '3px solid var(--interactive-accent)',
+    borderLeft: '2px solid var(--interactive-accent)',
     paddingLeft: '24px',
     color: 'var(--text-normal)',
   },
-  '.cm-line.cm-callout': {
-    borderLeft: '3px solid var(--interactive-accent)',
-    paddingLeft: '14px',
-    background: 'var(--tag-bg)',
-  },
-  '.cm-callout-tip, .cm-callout-note, .cm-callout-info, .cm-callout-success': {
-    borderLeftColor: '#3a9e54',
-  },
-  '.cm-callout-warning, .cm-callout-caution': { borderLeftColor: '#e0a800' },
-  '.cm-callout-danger, .cm-callout-error, .cm-callout-bug': { borderLeftColor: '#e5534b' },
   // Markdown tables — mirror Obsidian's table CSS variables
   // (https://docs.obsidian.md/Reference/CSS+variables/Editor/Table): 1px border,
   // left-aligned + top-valigned cells, semibold header with a subtle background.
@@ -1756,14 +2454,18 @@ export const livePreviewTheme = EditorView.baseTheme({
     background: 'var(--bg-modifier-hover)',
     borderColor: 'var(--interactive-accent)',
   },
-  // Raw embedded HTML (e.g. CKEditor/Trilium tables).
+  // Raw embedded HTML (e.g. CKEditor/Trilium tables) — table metrics match the
+  // reading view (4px 10px cells, semibold header) so both modes look alike.
   '.cm-html-block': { margin: '6px 0' },
-  '.cm-html-block table': { borderCollapse: 'collapse', margin: '6px 0', width: 'auto' },
+  '.cm-html-block table': { borderCollapse: 'collapse', margin: '4px 0', width: 'auto' },
   '.cm-html-block th, .cm-html-block td': {
     border: '1px solid var(--bg-modifier-border)',
-    padding: '6px 12px',
+    padding: '4px 10px',
+    textAlign: 'left',
     verticalAlign: 'top',
+    lineHeight: '1.5',
   },
+  '.cm-html-block th': { fontWeight: '600', background: 'var(--bg-secondary)' },
   '.cm-html-block ul, .cm-html-block ol': { paddingLeft: '1.4em', margin: '2px 0' },
   '.cm-html-block a': { color: 'var(--text-accent)', textDecoration: 'underline', cursor: 'pointer' },
 });

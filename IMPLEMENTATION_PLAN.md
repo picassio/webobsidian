@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-10
+Cập nhật lần cuối: 2026-06-11
 
 ---
 
@@ -153,7 +153,99 @@ Cập nhật lần cuối: 2026-06-10
       (title, description, canonical, Open Graph + og:image, Twitter card); locked → form password
       noindex; thay thế trang React /share (web bỏ PublicNote, dev proxy /share về server)
 
+## Phase 17 — Pane menu (⋯) & Right sidebar tabs (theo phản hồi người dùng, PRD 0.3)
+- [x] M17.1 Menu "More options" (⋯) trên view-header mọi pane: note (Split right/down, Bookmark,
+      Copy public link, Make a copy, Rename/Move/Copy path/Delete, Close tab/Close others),
+      Graph (Copy screenshot PNG → clipboard, Close tab)
+- [x] M17.2 Split pane 2 hướng: right + down (persist `splitDirection` trong uistate)
+- [x] M17.3 Right sidebar tab strip icon (Backlinks · Outgoing links · Tags · Outline),
+      persist tab đang chọn (`rightPanel`)
+- [x] M17.4 Unlinked mentions (search title + match **cả cụm** qua `/api/search/matches`
+      `phrase:true`, loại note đã link) + Outgoing links (parse wikilinks, resolved/unresolved,
+      lọc attachment khỏi unresolved, click mở/tạo)
+
+---
+
+## Phase 18 — Markdown editor parity Obsidian Desktop (docs/obsidian-desktop-internals.md)
+- [x] M18.1 CSS design tokens theo app.css 1.12.7 (§19): accent HSL 258/88%/66% + accent-1/-2
+      công thức light/dark, color-base ramp đúng giá trị, extended colors + `-rgb`, semantic
+      tokens (`--background-*`, `--text-*`, `--interactive-*`), heading 1.618/1.462/1.318/
+      1.188/1.076/1em + letter-spacing, `--bold-modifier: 200`, `--file-line-width: 700px`,
+      callout slots RGB triplet (§21); giữ alias var cũ cho component hiện hữu
+- [x] M18.2 DOM classes chuẩn (§20): root `markdown-source-view cm-s-obsidian mod-cm6
+      is-live-preview is-readable-line-width`; line `HyperMD-header-1..6 / -list-line /
+      -task-line[data-task] / -quote / -codeblock(-begin/-end/-bg) / -hr / -footnote`; span
+      `cm-hashtag(-begin/-end), cm-strikethrough, cm-inline-code, cm-hmd-internal-link,
+      cm-formatting(-header/-highlight), cm-comment, cm-math, cm-footref, cm-url, cm-blockid`
+- [x] M18.3 Live Preview token mới (§7): `==highlight==` ẩn marker; `%%comment%%` faint;
+      footref `[^id]` superscript + render dòng definition; block id `^abc-123` faint;
+      HR widget; ẩn fence ``` khi caret ngoài block; ẩn escape `\.` (file Trilium export);
+      task mọi ký tự non-space = done (x/X gạch + muted); callout regex
+      `/^\[!([^\]]+)\]([+-]?)(?:\s|$)/` + đủ bảng màu/icon §21 + title mặc định + fold mark
+- [x] M18.4 Wikilink đúng luật §7: alias sau `|` ĐẦU, loại `[[` lồng, NBSP→space + NFC;
+      LP label giữ raw `Note#Head` (aria-label = `Note > Head` như Obsidian);
+      size param ảnh `![[img|300]]` / `![[img|300x200]]`
+- [x] M18.5 Tag regex chính xác §7 (charset unicode, loại thuần số, cần ≥1 chữ cái);
+      pill 2 nửa cm-hashtag-begin/-end
+- [x] M18.6 Hotkeys mặc định §4 (lib/editorCommands.ts): Mod+B/I/K/L/D, Mod+/ (%%), Mod+E
+      (edit↔reading), Mod+S, Alt+Enter follow link; toggle pair thông minh (wrap/unwrap +
+      word-at-caret); Enter/Backspace tiếp tục list markup
+- [x] M18.7 Suggester `[[` (file) + `#` (tag) — port nguyên công thức điểm fuzzy §9
+      (lib/fuzzy.ts: token pass → per-char pass, penalty mid-word/span/offset/length,
+      basename trước path −1); dropdown `.suggestion-container` chuẩn §20, flip lên khi gần
+      đáy; Enter/Tab/↑↓/Esc qua keymap Prec.highest (lib/suggest.ts)
+- [x] M18.8 Math render KaTeX lazy-load (inline `$..$` + `$$..$$` 1 dòng); code block
+      syntax highlight (@codemirror/language-data); GFM base (strikethrough/table/tasklist);
+      checkbox style Obsidian (accent bg, radius 4px, size --font-text-size)
+- [x] M18.9 Line spacing khớp app.css thật: `.HyperMD-header { padding-top: var(--p-spacing) }`,
+      inline-title margin-bottom 0.5em, scroller line-height var(--line-height-normal)
+- [x] M18.10 Đợt sửa theo 11 lỗi người dùng báo (đối chiếu side-by-side với app):
+      (1) HighlightStyle riêng (lib/highlight.ts) màu token theo palette Obsidian — hết màu đỏ
+      escape/bracket lạ từ defaultHighlightStyle; (2) Embed thật: `![[note]]` transclusion render
+      qua api.resolve + renderMarkdown (NoteEmbedWidget, depth ≤3), ảnh/file thiếu → box
+      "could not be found"; (3) indent guide dọc cho list lồng (cm-indent mỗi đơn vị tab/4-space);
+      (4) blockquote lồng `> >` render nhiều thanh (data-quote-depth + layered gradient);
+      (5) checkbox/bullet hoạt động TRONG callout/quote (xử lý body sau marker);
+      (6) callout fold +/-: StateField (lưu toggle, trạng thái = default XOR toggle → bền với
+      async load), chevron click, `-` gập mặc định; (7) code block màu đúng + nhãn ngôn ngữ
+      góc phải (data-lang); (8) display math `$$` fix thứ tự escape-pass (chạy cuối, không
+      chiếm range); (9) HR hết margin thừa; (10) dòng inline-HTML (`<u>…`) render như HTML,
+      mermaid render thật (lazy mermaid.js, StateField block widget); (11) block comment `%%`
+      nhiều dòng xám toàn khối
+- [x] M18.12 Đợt sửa 3 (4 lỗi editor + Reading parity): (1) bảng trong HTML embed cùng metrics
+      với reading table; (2) inline footnote `^[...]` superscript; (3) fenced code có padding
+      trong nền (16px), indented code bỏ nền + có indent guide như app; (4) embed note thêm
+      `markdown-embed-title` (tên file) + fix khoảng trắng thừa (reset `white-space: normal`
+      trong widget — pre-wrap của cm-content biến \n giữa các block HTML thành dòng trống);
+      (5) Reading mode đồng bộ Live: task custom state `[/] [-] [>]`… thành checkbox
+      (remark plugin `remarkObsidianTasks`, data-task, chỉ gạch x/X), li bỏ bullet,
+      Properties hiện list value dạng pill (tags/aliases)
+- [ ] M18.11 Tương lai: MathJax thay KaTeX (glyph parity tuyệt đối), heading/block mode
+      suggester (`#`/`#^`), `$$` block nhiều dòng, click tag → search, fold heading/indent,
+      chevron fold đặt sau title (hiện đặt trước)
+
 ### Nhật ký tiến độ
+- 2026-06-11 (đợt 3): sửa 4 lỗi editor (HTML table, inline footnote, code block padding +
+  indented code guide, embed note title/khoảng trắng) + đồng bộ Reading mode với Live
+  (task custom states, bullet, properties pill). Verify cả 2 chế độ bằng screenshot.
+- 2026-06-11: Phase 18 đợt 2 — sửa 11 lỗi render người dùng báo khi đối chiếu note "Markdown Test"
+  side-by-side với Obsidian app (M18.10): highlight style riêng hết màu đỏ escape; embed note
+  transclusion thật + box "could not be found"; indent guides; quote lồng nhiều thanh; checkbox
+  trong callout; callout fold +/- hoạt động (gập mặc định với -, toggle bằng chevron); code block
+  màu palette Obsidian + nhãn ngôn ngữ; display math $$ render (KaTeX); HR hết margin thừa;
+  inline-HTML line + mermaid render thật (lazy); block comment %% xám toàn khối. Thêm deps:
+  katex, mermaid, @codemirror/language-data (đều lazy-load chunk riêng). Verify từng mục bằng
+  screenshot Chrome trên vault thật; typecheck + build sạch.
+- 2026-06-10: Phase 18 — sao chép markdown editor Obsidian Desktop theo docs/obsidian-desktop-internals.md.
+  CSS token verbatim (accent HSL + ramp + heading sizes + bold-modifier 200 + callout RGB slots);
+  DOM class chuẩn HyperMD-*/cm-*; LP thêm highlight/comment/math(KaTeX)/footref/blockid/HR/
+  ẩn fence + escape; callout đủ 14 slot màu + icon lucide + title mặc định; wikilink luật §7
+  (alias | đầu, NBSP+NFC, size param ảnh, label raw Note#Head); tag charset unicode chuẩn;
+  hotkeys §4 (Mod+B/I/K/L/D, Mod+/, Mod+E, Alt+Enter, list continuation); suggester [[ + #
+  với fuzzy scoring port nguyên công thức §9; line spacing đối chiếu app.css thật
+  (heading padding-top --p-spacing, inline-title 0.5em). Verify Chrome vault thật side-by-side
+  với Obsidian app: heading/highlight/tag pill/callout/task/code/footnote/math/suggester khớp;
+  typecheck + build sạch; note test đã xoá.
 - 2026-06-03: Khởi tạo PRD.md, IMPLEMENTATION_PLAN.md, CLAUDE.md.
 - 2026-06-03: Hoàn tất Phase 0–10. Backend (auth, vault, QMD search, links/graph, git+LFS,
   API gate, plugins) + frontend Obsidian-like (ribbon/sidebar/tabs/editor/reading/search/
@@ -403,6 +495,24 @@ Cập nhật lần cuối: 2026-06-10
   định 100→50, alphaDecay 0.02; (6) node tag đổi màu xanh lá kiểu Obsidian. Verify Chrome trên
   vault thật 5.9k note: đồ thị tụ thành khối cầu liên kết với tag xanh phân bố đều, label/zoom
   ổn, console sạch. Typecheck + build sạch.
+- 2026-06-10: Phase 17 (PRD 0.3) — pane menu (⋯) + đại tu Right sidebar theo phản hồi "thiếu menu
+  3 chấm + thiếu chức năng sidebar phải". (1) Nút ⋯ "More options" trên view-header MỌI view:
+  note = Split right/Split down + Bookmark + Copy public link + Make a copy + Rename/Move/Copy
+  path/Delete + Close tab/Close other tabs; Graph = Copy screenshot (extract Pixi stage → PNG
+  composite nền theme → clipboard; cần render lại vì WebGL không preserveDrawingBuffer) + Close
+  tab. (2) Split pane 2 hướng: `splitDirection` right/down persist trong uistate, `.editor-area.
+  split-down` flex-column. (3) Right sidebar thành tab strip icon kiểu Obsidian: Backlinks
+  (Linked mentions + **Unlinked mentions**) · Outgoing links (resolved/unresolved, lọc attachment
+  khỏi unresolved để không tạo nhầm note .md) · Tags (tái dùng TagsPanel, click → search tag:x
+  đúng query) · Outline; `rightPanel` persist + sync. (4) Server: `/api/search/matches` thêm
+  `phrase:true` → match cả cụm (unlinked mentions chính xác như Obsidian thay vì OR từng từ —
+  verify curl: phrase=0 hit vs word-based=1679 trên cùng note). Icon mới: more-horizontal/rows/
+  list/arrow-up-right/camera. Verify CDP trên vault thật: menu ⋯ note đủ 11 mục, Split down ra
+  pane dưới có header+close, Copy screenshot → clipboard chứa image/png, tab strip đổi panel,
+  unlinked mentions 30→0 sau phrase fix (title dài không xuất hiện verbatim), rightPanel khôi
+  phục sau reload. Typecheck + build web+server sạch; restart server dist mới. Lưu ý môi trường:
+  client cũ (bundle trước) của user đang mở /graph liên tục đẩy uistate ghi đè khi test — không
+  phải bug code mới.
 - 2026-06-10: Graph view — đồng bộ slider với đơn vị/mặc định gốc của Obsidian app: Text fade
   -3..3=0, Node size 0.1..5=1, Link thickness 0.1..5=1, Center force 0..1=0.52, Repel force
   0..20=10, Link force 0..1=1, Link distance 30..500=250 (map nội bộ về tham số d3 đã calibrate

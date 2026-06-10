@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap, highlightActiveLine, drawSelection } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
+import { syntaxHighlighting } from '@codemirror/language';
+import { obsidianHighlightStyle } from '../lib/highlight';
 import { useStore } from '../lib/store';
+import type { TreeNode } from '../lib/api';
+import { obsidianKeymap } from '../lib/editorCommands';
+import { suggesterPlugin, setLinkSuggestFiles, setTagSuggestTags } from '../lib/suggest';
 import {
   livePreviewPlugin,
   livePreviewState,
@@ -13,18 +17,23 @@ import {
   frontmatterField,
   tableField,
   htmlBlockField,
+  mermaidField,
+  calloutFoldState,
+  calloutFoldDeco,
   noteTitleField,
   inlineTitleField,
   editorClickFix,
   setLivePreviewEnabled,
   setLivePreviewLinkHandler,
   setLivePreviewMenuHandler,
+  setLivePreviewNoteEmbedProvider,
   setLivePreviewPropertyProvider,
   setLivePreviewPropertyTypes,
   setLivePreviewPropertyTypeSetter,
   setLivePreviewTagProvider,
   setNoteTitle,
 } from '../lib/livePreview';
+import { renderMarkdown } from '../lib/markdown';
 import { api } from '../lib/api';
 
 const titleOf = (path: string | null) =>
@@ -42,6 +51,7 @@ export default function Editor() {
   const openWikilink = useStore((s) => s.openWikilink);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
+  const tree = useStore((s) => s.tree);
 
   useEffect(() => {
     setLivePreviewLinkHandler(openWikilink);
@@ -51,7 +61,46 @@ export default function Editor() {
     setLivePreviewMenuHandler(openContextMenu);
     setLivePreviewPropertyProvider(() => api.properties().then((r) => r.properties).catch(() => []));
     setLivePreviewTagProvider(() => api.tags().then((r) => r.tags.map((t) => t.tag)).catch(() => []));
+    // ![[note]] transclusion: resolve + render with the same pipeline as Reading.
+    const resolveEmbed = async (target: string) => {
+      try {
+        const { path } = await api.resolve(target);
+        if (!path) return null;
+        const r = await api.read(path);
+        return { path, content: typeof r === 'string' ? r : r.content };
+      } catch {
+        return null;
+      }
+    };
+    setLivePreviewNoteEmbedProvider(async (target) => {
+      const note = await resolveEmbed(target.split('#')[0].trim());
+      if (!note) return null;
+      const stripped = note.content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+      const html = await renderMarkdown(stripped, { rawUrl: (p) => api.rawUrl(p), resolveEmbed });
+      return { html };
+    });
   }, [openContextMenu]);
+
+  // Feed the `[[` link suggester (vault file paths) and the `#` tag suggester.
+  useEffect(() => {
+    const files: string[] = [];
+    const walk = (n: TreeNode) => {
+      if (n.type === 'file') files.push(n.path);
+      n.children?.forEach(walk);
+    };
+    if (tree) walk(tree);
+    setLinkSuggestFiles(() => files);
+  }, [tree]);
+  useEffect(() => {
+    let tags: string[] = [];
+    api
+      .tags()
+      .then((r) => {
+        tags = r.tags.map((t) => t.tag.replace(/^#/, ''));
+      })
+      .catch(() => {});
+    setTagSuggestTags(() => tags);
+  }, [activePath]);
 
   // Load the vault's property type registry (.obsidian/types.json) once.
   useEffect(() => {
@@ -180,7 +229,6 @@ export default function Editor() {
     view.current?.destroy();
 
     const isMd = activePath ? /\.(md|markdown)$/i.test(activePath) : false;
-    const isDark = !!document.querySelector('.theme-dark');
     // Place the caret after the frontmatter so Properties render immediately.
     const fmMatch = isMd ? content.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/) : null;
     const initPos = Math.min(fmMatch ? fmMatch[0].length : 0, content.length);
@@ -191,9 +239,25 @@ export default function Editor() {
         history(),
         drawSelection(),
         highlightActiveLine(),
+        // Obsidian default hotkeys (§4) win over CodeMirror's defaults.
+        Prec.high(
+          keymap.of(
+            obsidianKeymap({
+              openLink: (t) => void openWikilink(t),
+              togglePreview: () =>
+                useStore.getState().setViewMode(useStore.getState().viewMode === 'reading' ? 'live' : 'reading'),
+              save: () => void useStore.getState().save(),
+            }),
+          ),
+        ),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        markdown(),
-        ...(isDark ? [oneDark] : [syntaxHighlighting(defaultHighlightStyle)]),
+        // GFM base so Strikethrough/Table/TaskList nodes exist (Obsidian dialect);
+        // codeLanguages lazy-loads grammars for fenced blocks (Obsidian: Prism).
+        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        suggesterPlugin,
+        // Obsidian token palette via CSS vars (works in both themes); markdown
+        // structure styling is owned by the Live Preview decorations.
+        syntaxHighlighting(obsidianHighlightStyle),
         EditorView.lineWrapping,
         livePreviewState.init(() => isMd && viewMode === 'live'),
         noteTitleField.init(() => titleOf(activePath)),
@@ -201,6 +265,9 @@ export default function Editor() {
         frontmatterField,
         tableField,
         htmlBlockField,
+        mermaidField,
+        calloutFoldState,
+        calloutFoldDeco,
         livePreviewPlugin,
         livePreviewTheme,
         editorClickFix,
@@ -250,5 +317,15 @@ export default function Editor() {
     return () => window.clearTimeout(id);
   }, [content, save]);
 
-  return <div className={`cm-host ${viewMode === 'live' ? 'live-preview' : ''}`} ref={host} onContextMenu={onContextMenu} />;
+  // Obsidian DOM contract (§20): markdown-source-view.cm-s-obsidian.mod-cm6
+  // + .is-live-preview when Live Preview is on; readable line length caps width.
+  const cls = [
+    'cm-host',
+    'markdown-source-view',
+    'cm-s-obsidian',
+    'mod-cm6',
+    'is-readable-line-width',
+    viewMode === 'live' ? 'is-live-preview live-preview' : '',
+  ].join(' ');
+  return <div className={cls} ref={host} onContextMenu={onContextMenu} />;
 }
