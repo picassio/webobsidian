@@ -185,6 +185,12 @@ Everything else — git remote/token, API keys, plugins, theme — is configured
 Scoped REST API for AI agents at `/api/v1`. Create an API key in **Settings → API Keys**,
 then pass it as a header. Full reference: **[docs/AGENT_API.md](docs/AGENT_API.md)**.
 
+> 🧩 **Drop-in agent skill.** Want your coding agent (Claude Code, Codex, OpenCode…) to
+> work with your vault directly? Paste the bootstrap in
+> [docs/agent-skill/INSTALL.md](docs/agent-skill/INSTALL.md) — the agent self-installs the
+> [`webobsidian` skill](docs/agent-skill/webobsidian/SKILL.md), asks for your URL + API key
+> once, saves them, and can then read/write/search your notes on request.
+
 ```bash
 KEY=wok_your_key_here
 BASE=http://localhost:8787/api/v1
