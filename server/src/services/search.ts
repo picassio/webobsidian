@@ -333,6 +333,11 @@ class QmdEngine {
         storeFields: ['title', 'path', 'tags'],
         autoVacuum: false,
       });
+      // A persisted *empty* index (e.g. a prior build ran while the vault was
+      // briefly unreadable) must not be trusted — restoring it would leave the
+      // engine ready=true with zero docs, so every query returns nothing and we
+      // never rebuild. Treat it as a cache miss so initSearch() builds fresh.
+      if (this.mini.documentCount === 0) return false;
       this.snippets = new Map(payload.snippets);
       this.tagSet = new Map(payload.tags);
       this.propMeta = new Map(payload.propMeta ?? []);
