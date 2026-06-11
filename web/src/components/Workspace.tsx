@@ -3,6 +3,8 @@ import { api } from '../lib/api';
 import Editor from './Editor';
 import Preview from './Preview';
 import GraphView from './GraphView';
+import FolderView from './FolderView';
+import { isFolderPath } from '../lib/tree';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
 import FormatToolbar from './FormatToolbar';
@@ -57,12 +59,15 @@ export default function Workspace() {
   const goBack = useStore((s) => s.goBack);
   const goForward = useStore((s) => s.goForward);
   const openContextMenu = useStore((s) => s.openContextMenu);
+  const setMovePath = useStore((s) => s.setMovePath);
   const setRightPanel = useStore((s) => s.setRightPanel);
   const setShareDialog = useStore((s) => s.setShareDialog);
   const setVersionHistory = useStore((s) => s.setVersionHistory);
   const revealInTree = useStore((s) => s.revealInTree);
   const loadTree = useStore((s) => s.loadTree);
   const splitDirection = useStore((s) => s.splitDirection);
+  const tree = useStore((s) => s.tree);
+  const activeIsFolder = isFolderPath(tree, activePath);
   const histIndex = useStore((s) => s.histIndex);
   const historyLen = useStore((s) => s.history.length);
   const canGoBack = histIndex > 0;
@@ -134,18 +139,8 @@ export default function Workspace() {
       };
       const moveItem: ContextMenuItem = {
         label: 'Move file to…',
-        onClick: async () => {
-          const i = path.lastIndexOf('/');
-          const dir = prompt('Move to folder (vault-relative, blank = root):', i < 0 ? '' : path.slice(0, i));
-          if (dir === null) return;
-          const to = dir ? `${dir.replace(/\/$/, '')}/${baseName}` : baseName;
-          if (to !== path) {
-            await api.rename(path, to);
-            closeTab(path);
-            await loadTree();
-            await openFile(to);
-          }
-        },
+        icon: 'folder',
+        onClick: () => setMovePath(path),
       };
       const copyItem: ContextMenuItem = {
         label: 'Make a copy',
@@ -191,10 +186,10 @@ export default function Workspace() {
           : []),
         sep,
         {
-          label: 'Copy path',
+          label: 'Copy URL path',
           onClick: () => {
-            navigator.clipboard?.writeText(path).catch(() => {});
-            notify('Path copied');
+            navigator.clipboard?.writeText(`${location.origin}${pathToUrl(path)}`).catch(() => {});
+            notify('URL copied');
           },
         },
         { label: 'Open version history', icon: 'clock', onClick: () => setVersionHistory(path) },
@@ -369,9 +364,11 @@ export default function Workspace() {
               </div>
             </>
           )}
-          <button className="tool-btn" title="More options" onClick={openMoreMenu}>
-            <Icon name="more-horizontal" size={18} />
-          </button>
+          {!activeIsFolder && (
+            <button className="tool-btn" title="More options" onClick={openMoreMenu}>
+              <Icon name="more-horizontal" size={18} />
+            </button>
+          )}
         </div>
       )}
 
@@ -395,7 +392,12 @@ export default function Workspace() {
             <GraphView />
           </div>
         )}
-        {activePath && activePath !== GRAPH_PATH && (
+        {activePath && activePath !== GRAPH_PATH && activeIsFolder && (
+          <div className="pane main-pane">
+            <FolderView path={activePath} />
+          </div>
+        )}
+        {activePath && activePath !== GRAPH_PATH && !activeIsFolder && (
           <div className="pane main-pane">
             <EditorPane />
           </div>

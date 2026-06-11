@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-12 (Toast tiến trình cho lệnh Rebuild search index)
+Cập nhật lần cuối: 2026-06-12 (Folder picker "Move file to…" + context menu Bookmarks/Recent)
 
 ---
 
@@ -305,7 +305,42 @@ Cập nhật lần cuối: 2026-06-12 (Toast tiến trình cho lệnh Rebuild se
 - [x] M21.7 Open in new window: `window.open(pathToUrl(path))` mở deep-link `/note/<path>` ở tab mới;
       Open linked view submenu (Backlinks/Outgoing links/Outline → `setRightPanel`)
 
+---
+
+## Phase 22 — Folder picker "Move file to…" + context menu Bookmarks/Recent (theo yêu cầu người dùng)
+- [x] M22.1 Modal folder-picker kiểu Obsidian suggester (`FolderPicker.tsx`): gõ lọc folder, ↑↓
+      điều hướng, ↵ move vào folder chọn, ⇧↵ tạo folder mới theo tên gõ rồi move, esc đóng; footer
+      gợi ý phím. Driven bởi `store.movePath`/`setMovePath`. Thay `prompt()` cũ ở menu ⋯ (Workspace)
+      và menu chuột phải file tree (FileTree). Lọc bỏ folder hiện tại + chính nó/con khi move folder.
+- [x] M22.2 Context menu chuột phải cho panel Bookmarks & Recent (`BookmarksPanel.tsx`):
+      Open/Open to right/Reveal in navigation/Move file to…/Bookmark↔Remove bookmark/Copy path;
+      mục Recent thêm "Remove from recent" (`store.removeRecent`). Trước đây right-click rơi vào
+      menu native của trình duyệt vì panel chưa có `onContextMenu`.
+- [x] M22.3 Kéo-thả hàng Bookmark/Recent vào folder ở file tree để move (dùng chung payload
+      `text/wo-path` mà FileTree đã đọc) + nút hành động hiện khi hover trên mỗi hàng (📁 Move file
+      to… và ✕ Remove bookmark / Remove from recent).
+
 ### Nhật ký tiến độ
+- 2026-06-12 (Folder deep-link → Folder view): mở URL trỏ folder (`/note/<folder>`) trước đây bị
+  render như note rỗng (Editor) tên folder. Thêm `lib/tree.ts` (`findNode`/`isFolderPath`) + component
+  `FolderView.tsx` liệt kê nội dung folder (folder con + note, sort folder trước; thumbnail ảnh; kéo-thả
+  được; nút + tạo note trong folder). `store.openFile` phát hiện folder qua tree → bỏ qua `api.read` và
+  không thêm vào Recent. Workspace render FolderView khi `isFolderPath(tree, activePath)`, ẩn nút ⋯
+  (menu file không áp dụng cho folder). Typecheck + build sạch.
+- 2026-06-12 (Phase 22 — Move file to… + context menu Bookmarks/Recent): tính năng "Move file to…"
+  trước đây là `prompt()` gõ tay đường dẫn — thay bằng modal folder-picker kiểu Obsidian
+  (`FolderPicker.tsx`, mount ở App cạnh ContextMenu): gõ lọc folder, ↑↓ chọn, ↵ move, ⇧↵ tạo folder
+  mới theo tên gõ rồi move (vault.rename tự tạo thư mục cha), esc đóng. State qua `store.movePath`/
+  `setMovePath` (không persist). Menu ⋯ (Workspace) và menu chuột phải file tree (FileTree) giờ chỉ
+  gọi `setMovePath(path)`. Panel Bookmarks/Recent (`BookmarksPanel.tsx`) thêm `onContextMenu` →
+  `openContextMenu` (trước đây right-click rơi vào menu native trình duyệt): Open/Open to right/
+  Reveal/Move file to…/Bookmark/Copy path; Recent có thêm "Remove from recent" (`store.removeRecent`).
+  Bổ sung: hàng Bookmark/Recent `draggable` (kéo vào folder file tree để move, dùng chung payload
+  `text/wo-path`) + nút hover trên mỗi hàng (📁 Move / ✕ Remove). Typecheck + build web sạch.
+- 2026-06-12 (Copy path → Copy URL path): menu chuột phải file (FileTree), menu ⋯ (Workspace) và
+  panel Bookmarks/Recent đổi "Copy path" → "Copy URL path", copy deep-link đầy đủ
+  `${location.origin}${pathToUrl(path)}` (vd `http://localhost:8787/note/...`) thay vì path vault.
+  Menu chuột phải folder vẫn giữ "Copy path" (folder không có URL note). Typecheck + build sạch.
 - 2026-06-12 (Toast cho "Rebuild search index"): lệnh reindex (~12s với vault 6000+ note) trước
   đây chạy im, không phản hồi UI. `notify()` (store.ts) thêm tham số `ms` (mặc định 2500, `0` =
   giữ tới khi bị thay). CommandPalette: hiện "Rebuilding search index…" (persistent) lúc bắt đầu,

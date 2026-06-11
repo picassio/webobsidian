@@ -773,6 +773,23 @@ button { font-family: inherit; }
 .panel-item { padding: 5px 10px; font-size: 13px; cursor: pointer; color: var(--text-muted); border-radius: var(--radius-s);
   display: flex; align-items: center; gap: 8px; }
 .panel-item:hover { color: var(--text-accent); background: var(--bg-modifier-hover); }
+.panel-item-actions { margin-left: auto; display: flex; gap: 1px; opacity: 0; flex-shrink: 0; }
+.panel-item:hover .panel-item-actions { opacity: 1; }
+.panel-item-actions > span { display: flex; padding: 2px; border-radius: var(--radius-s); color: var(--text-faint); }
+.panel-item-actions > span:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
+
+/* Folder content view (deep-link /note/<folder>) */
+.folder-view-head { display: flex; align-items: center; gap: 10px; }
+.folder-view-head h1 { display: flex; align-items: center; gap: 10px; flex: 1; margin: 0; }
+.folder-view-meta { color: var(--text-faint); font-size: 13px; margin: 6px 0 18px; }
+.folder-empty { color: var(--text-faint); }
+.folder-list { display: flex; flex-direction: column; gap: 1px; }
+.folder-entry { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer;
+  border-radius: var(--radius-s); color: var(--text-normal); }
+.folder-entry:hover { background: var(--bg-modifier-hover); }
+.folder-entry .folder-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-entry > svg { color: var(--text-muted); flex-shrink: 0; }
+.folder-thumb { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; flex-shrink: 0; }
 /* Right sidebar tab strip (Backlinks · Outgoing links · Tags · Outline) */
 .right-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 6px;
   border-bottom: 1px solid var(--bg-modifier-border); }
@@ -816,6 +833,9 @@ button { font-family: inherit; }
 .palette-item { padding: 9px 12px; cursor: pointer; display: flex; gap: 10px; align-items: center; border-radius: var(--radius-s); }
 .palette-item.sel { background: var(--bg-modifier-active); }
 .palette-item .kbd { margin-left: auto; color: var(--text-faint); font-size: 11px; }
+.palette-footer { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+  padding: 7px 12px; border-top: 1px solid var(--bg-modifier-border); color: var(--text-faint); font-size: 11px; }
+.palette-footer .kbd { color: var(--text-muted); font-size: 11px; margin-right: 3px; }
 
 /* Context menu */
 .context-menu { position: fixed; z-index: 300; min-width: 190px; background: var(--bg-primary);

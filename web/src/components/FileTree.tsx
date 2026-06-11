@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api, type TreeNode } from '../lib/api';
+import { pathToUrl } from '../lib/urlsync';
 import Icon from './Icon';
 
 function fileIcon(node: TreeNode): string | null {
@@ -27,6 +28,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const loadTree = useStore((s) => s.loadTree);
   const closeTab = useStore((s) => s.closeTab);
   const openContextMenu = useStore((s) => s.openContextMenu);
+  const setMovePath = useStore((s) => s.setMovePath);
   const createNote = useStore((s) => s.createNote);
   const toggleBookmark = useStore((s) => s.toggleBookmark);
   const bookmarks = useStore((s) => s.bookmarks);
@@ -63,20 +65,14 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     await loadTree();
     notify('Made a copy');
   };
-  const doMove = async () => {
-    const dir = prompt('Move to folder (vault-relative, blank = root):', parentDir(node.path));
-    if (dir === null) return;
-    const base = node.path.split('/').pop()!;
-    const to = dir ? `${dir.replace(/\/$/, '')}/${base}` : base;
-    if (to !== node.path) {
-      await api.rename(node.path, to);
-      closeTab(node.path);
-      await loadTree();
-    }
-  };
+  const doMove = () => setMovePath(node.path);
   const copyPath = () => {
     navigator.clipboard?.writeText(node.path).catch(() => {});
     notify('Path copied');
+  };
+  const copyUrl = () => {
+    navigator.clipboard?.writeText(`${location.origin}${pathToUrl(node.path)}`).catch(() => {});
+    notify('URL copied');
   };
 
   const onContext = (e: React.MouseEvent) => {
@@ -96,6 +92,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { label: 'Rename…', onClick: doRename },
           { label: 'Move folder to…', onClick: doMove },
           { label: 'Copy path', onClick: copyPath },
+          { label: 'Copy URL path', onClick: copyUrl },
           { label: '', separator: true },
           { label: 'Delete', danger: true, onClick: doDelete },
         ]
@@ -110,7 +107,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           { label: 'Make a copy', onClick: doCopy },
           { label: 'Rename…', onClick: doRename },
           { label: 'Move file to…', onClick: doMove },
-          { label: 'Copy path', onClick: copyPath },
+          { label: 'Copy URL path', onClick: copyUrl },
           { label: '', separator: true },
           { label: 'Delete', danger: true, onClick: doDelete },
         ];

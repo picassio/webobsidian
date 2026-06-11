@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
+import { findNode } from './tree';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -106,8 +107,13 @@ interface AppState {
   closeSplit: () => void;
 
   recent: string[];
+  removeRecent: (path: string) => void;
   bookmarks: string[];
   toggleBookmark: (path: string) => void;
+
+  /** Path of the file/folder the "Move to…" folder picker is acting on (null = closed). */
+  movePath: string | null;
+  setMovePath: (path: string | null) => void;
 
   leftPanel: 'files' | 'search' | 'tags' | 'bookmarks';
   setLeftPanel: (p: 'files' | 'search' | 'tags' | 'bookmarks') => void;
@@ -319,6 +325,9 @@ export const useStore = create<AppState>()(
       closeSplit: () => set({ splitPath: null, splitContent: '' }),
 
       recent: [],
+      removeRecent: (path) => set((s) => ({ recent: s.recent.filter((p) => p !== path) })),
+      movePath: null,
+      setMovePath: (path) => set({ movePath: path }),
       bookmarks: [],
       toggleBookmark: (path) =>
         set((s) => ({
@@ -415,15 +424,18 @@ export const useStore = create<AppState>()(
       openFile: async (path) => {
         if (path === GRAPH_PATH) return get().openGraph();
         if (get().dirty) await get().save();
+        // A folder path (e.g. deep-link /note/<folder>) opens a folder content
+        // view — never read it as a note nor pollute Recent with it.
+        const isFolder = findNode(get().tree, path)?.type === 'folder';
         let content = '';
-        if (TEXT_RE.test(path)) {
+        if (!isFolder && TEXT_RE.test(path)) {
           const r = await api.read(path);
           content = typeof r === 'string' ? r : r.content;
         }
         const title = path.split('/').pop() ?? path;
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
-          const recent = [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
+          const recent = isFolder ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
           return { tabs, activePath: path, content, dirty: false, recent, ...pushHistory(s, path) };
         });
       },
