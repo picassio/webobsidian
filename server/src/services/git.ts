@@ -77,7 +77,15 @@ export async function ensureLfsAttributes(): Promise<void> {
   } catch {
     /* none */
   }
-  const lines = new Set(existing.split('\n').map((l) => l.trim()).filter(Boolean));
+  const lines = new Set(
+    existing
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      // Drop any leftover git merge-conflict markers so resolving a .gitattributes
+      // conflict by regenerating never bakes `<<<<<<<`/`=======`/`>>>>>>>` into the file.
+      .filter((l) => !/^(<{7}|={7}|>{7})/.test(l)),
+  );
   for (const p of s.git.lfsPatterns) {
     lines.add(`${p} filter=lfs diff=lfs merge=lfs -text`);
   }
