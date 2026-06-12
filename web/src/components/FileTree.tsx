@@ -101,6 +101,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
   const clipboard = useStore((s) => s.clipboard);
   const setClipboard = useStore((s) => s.setClipboard);
   const newNote = useStore((s) => s.newNote);
+  const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
   const renamingPath = useStore((s) => s.renamingPath);
   const setRenamingPath = useStore((s) => s.setRenamingPath);
@@ -192,6 +193,7 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
     const items = isFolder
       ? [
           { label: 'New note', onClick: () => newNote(node.path) },
+          { label: 'New canvas', onClick: () => newCanvas(node.path) },
           { label: 'New folder', onClick: () => newFolder(node.path) },
           { label: '', separator: true },
           { label: 'Copy', onClick: doClipboard('copy') },
@@ -317,6 +319,7 @@ export default function FileTree() {
   const setClipboard = useStore((s) => s.setClipboard);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const newNote = useStore((s) => s.newNote);
+  const newCanvas = useStore((s) => s.newCanvas);
   const newFolder = useStore((s) => s.newFolder);
 
   // "Reveal file in navigation": scroll + flash the row once its folders expand.
@@ -380,6 +383,7 @@ export default function FileTree() {
       y: e.clientY,
       items: [
         { label: 'New note', onClick: () => newNote('') },
+        { label: 'New canvas', onClick: () => newCanvas('') },
         { label: 'New folder', onClick: () => newFolder('') },
         ...(clipboard
           ? [{ label: '', separator: true }, { label: 'Paste', onClick: pasteToRoot }]

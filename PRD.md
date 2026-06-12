@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 0.9 · Cập nhật: 2026-06-12 · Trạng thái: Draft
+> Phiên bản: 1.0 · Cập nhật: 2026-06-12 · Trạng thái: Draft
+> Changelog 1.0 (FR-12 — Canvas, theo yêu cầu người dùng): clone tính năng **Canvas** của Obsidian. Khung vẽ
+> vô hạn (pan/zoom) chứa các node (text markdown, file embed/link tới note hoặc ảnh, link URL, group) và các
+> edge nối cạnh node có mũi tên + nhãn. Đọc/ghi đúng định dạng mở **JSON Canvas** (`.canvas`, tương thích
+> Obsidian). Tạo/di chuyển/resize/đổi màu/xóa node, nối edge bằng kéo từ chấm cạnh, multi-select + marquee,
+> double-click nền tạo text node, double-click text node để sửa. Autosave debounce như editor (qua store
+> `content`/`save`). Tạo canvas mới: context menu file tree + command palette. Không thêm API mới (dùng
+> `/api/files/content`).
 > Changelog 0.9 (FR-1 — Copy/Cut/Paste trong context menu file tree theo yêu cầu người dùng): menu chuột phải
 > file/folder bổ sung **Copy**, **Cut**, **Paste** (clipboard session-local, không persist/broadcast). Cut dùng
 > `rename` (move) cho cả file lẫn folder; Copy dùng endpoint mới **POST `/api/files/copy`** copy đệ quy file/folder
@@ -273,6 +280,38 @@ cùng một codebase React.
   Mobile. **Desktop**: thanh in-flow ngay dưới view-header (theo yêu cầu người dùng).
 - **Viewport & safe-area**: `viewport-fit=cover`; chừa `env(safe-area-inset-*)` cho notch/home-indicator;
   không cho double-tap zoom (app-like) nhưng giữ pinch-zoom ảnh trong reading.
+
+### FR-12 · Canvas (khung vẽ vô hạn — JSON Canvas)
+Mục tiêu: clone tính năng **Canvas** của Obsidian — một mặt phẳng vô hạn để sắp xếp card/note/ảnh/link và nối
+chúng bằng đường có mũi tên, dùng cho brainstorm, moodboard, sơ đồ. Tham chiếu UX Obsidian Canvas.
+
+- **Định dạng file `.canvas`**: tuân thủ chuẩn mở **JSON Canvas** (jsoncanvas.org) để tương thích hai chiều với
+  Obsidian. File là JSON `{ "nodes": [...], "edges": [...] }`.
+  - **Node** (chung): `id`, `type`, `x`, `y`, `width`, `height`, `color?`. `color` là preset `"1".."6"`
+    (đỏ/cam/vàng/lục/lam/tím) hoặc hex `"#RRGGBB"`.
+    - `type:"text"` → `text` (markdown).
+    - `type:"file"` → `file` (đường dẫn vault-relative), `subpath?` (heading/block).
+    - `type:"link"` → `url`.
+    - `type:"group"` → `label?`, `background?`, `backgroundStyle?`.
+  - **Edge**: `id`, `fromNode`, `fromSide?`(top/right/bottom/left), `fromEnd?`(none/arrow), `toNode`,
+    `toSide?`, `toEnd?`(none/arrow, mặc định arrow), `color?`, `label?`.
+- **Tương tác canvas**: pan (kéo nền hoặc space+kéo), zoom bằng cuộn chuột (con trỏ làm tâm), nút zoom in/out/
+  fit/100% trên thanh điều khiển. Lưới chấm nền.
+- **Node**: double-click nền → tạo **text node** và vào chế độ sửa ngay; double-click vào text node để sửa
+  (textarea), Esc/blur để thoát. Kéo node để di chuyển; 8 handle để resize. Drop file note/ảnh từ cây (hoặc
+  nút) → tạo **file node** render embed (note = preview markdown, ảnh = `<img>`). Đổi màu qua palette 6 màu +
+  mặc định. Xóa (Delete/Backspace).
+- **Edge**: hover node hiện 4 chấm cạnh; kéo từ một chấm sang node/cạnh khác → tạo edge. Edge vẽ bằng đường
+  cong Bézier theo hướng cạnh, có mũi tên ở đầu `to`. Double-click giữa edge để thêm/sửa **label**. Chọn edge
+  để đổi màu/xóa.
+- **Select**: click chọn 1 node/edge; kéo marquee trên nền để chọn nhiều; Shift+click thêm/bớt; di chuyển/xóa
+  theo nhóm. Thanh công cụ ngữ cảnh nổi khi có lựa chọn (đổi màu, xóa).
+- **Lưu**: autosave debounce (~900ms) như editor, ghi qua `PUT /api/files/content` (store `content`/`save`,
+  `.canvas` đã nằm trong `TEXT_RE`). Không thêm endpoint mới.
+- **Tạo canvas mới**: context menu cây thư mục ("New canvas") + command palette; tên `Untitled.canvas` không
+  trùng, nội dung khởi tạo `{"nodes":[],"edges":[]}`.
+- **Phạm vi v1 (non-goals)**: không có realtime collaborative cursor; không group auto-resize theo thành viên;
+  không portal/embed canvas-trong-canvas; không liên kết backlink graph từ node file (giữ đơn giản).
 
 ---
 

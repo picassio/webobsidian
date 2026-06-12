@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import Editor from './Editor';
 import Preview from './Preview';
 import GraphView from './GraphView';
+import CanvasView from './CanvasView';
 import FolderView from './FolderView';
 import { isFolderPath } from '../lib/tree';
 import Icon from './Icon';
@@ -18,7 +19,11 @@ function EditorPane() {
   const viewMode = useStore((s) => s.viewMode);
   const isMd = activePath ? /\.(md|markdown)$/i.test(activePath) : false;
   const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
+  const isCanvas = activePath ? /\.canvas$/i.test(activePath) : false;
 
+  if (activePath && isCanvas) {
+    return <CanvasView />;
+  }
   if (activePath && isImage) {
     return (
       <div className="markdown-preview">

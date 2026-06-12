@@ -178,6 +178,8 @@ interface AppState {
   newNote: (dir?: string) => Promise<void>;
   /** Obsidian-style: create a fresh "Untitled" folder (no prompt) and start inline-renaming it. */
   newFolder: (dir?: string) => Promise<void>;
+  /** Obsidian-style: create & open a fresh "Untitled.canvas" (empty JSON Canvas). `dir` = target folder. */
+  newCanvas: (dir?: string) => Promise<void>;
   /** Tree path currently being inline-renamed (null = none); FileTree shows an input for it. */
   renamingPath: string | null;
   setRenamingPath: (path: string | null) => void;
@@ -503,6 +505,17 @@ export const useStore = create<AppState>()(
         for (let i = 1; taken.has(name.toLowerCase()); i++) name = `Untitled ${i}.md`;
         const path = base ? `${base}/${name}` : name;
         await get().createNote(path, '');
+        if (base) get().revealInTree(path);
+      },
+
+      newCanvas: async (dir) => {
+        const base = (dir ?? '').replace(/\/+$/, '');
+        const folder = base ? findNode(get().tree, base) : get().tree;
+        const taken = new Set((folder?.children ?? []).map((c) => c.name.toLowerCase()));
+        let name = 'Untitled.canvas';
+        for (let i = 1; taken.has(name.toLowerCase()); i++) name = `Untitled ${i}.canvas`;
+        const path = base ? `${base}/${name}` : name;
+        await get().createNote(path, '{\n\t"nodes":[],\n\t"edges":[]\n}');
         if (base) get().revealInTree(path);
       },
 
