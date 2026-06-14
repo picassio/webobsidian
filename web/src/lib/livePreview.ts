@@ -9,6 +9,7 @@ import {
 import { StateField, StateEffect, type EditorState, type Range, type Text } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
+import { openLightbox } from './imageLightbox';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -184,6 +185,48 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
+const pointX = (e: MouseEvent | TouchEvent): number =>
+  'touches' in e ? (e.touches[0] ?? e.changedTouches[0]).clientX : e.clientX;
+
+/**
+ * Write a new pixel width back into the embed source that `wrap` renders, as the
+ * Obsidian size param: `![[img|W]]` for wikilink embeds, `![alt|W](url)` for
+ * markdown images. The widget's document position is recovered via posAtDOM, then
+ * the embed token covering it is re-found and rewritten (an existing trailing
+ * numeric size segment is replaced; otherwise one is appended).
+ */
+function writeImageWidth(view: EditorView, wrap: HTMLElement, width: number): void {
+  let pos: number;
+  try {
+    pos = view.posAtDOM(wrap);
+  } catch {
+    return;
+  }
+  const line = view.state.doc.lineAt(pos);
+  const off = pos - line.from;
+  const isSize = (s: string) => /^\s*\d+\s*(?:x\s*\d+\s*)?$/.test(s);
+  const withSize = (segs: string[]): string => {
+    if (segs.length > 1 && isSize(segs[segs.length - 1])) segs.pop();
+    segs.push(String(width));
+    return segs.join('|');
+  };
+  const tokens: Array<{ re: RegExp; build: (m: RegExpExecArray) => string }> = [
+    { re: /!\[\[([^\]]+?)\]\]/g, build: (m) => `![[${withSize(m[1].split('|'))}]]` },
+    { re: /!\[([^\]]*)\]\(([^)]+)\)/g, build: (m) => `![${withSize(m[1].split('|'))}](${m[2]})` },
+  ];
+  for (const { re, build } of tokens) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line.text))) {
+      if (m.index <= off && off <= m.index + m[0].length) {
+        const from = line.from + m.index;
+        view.dispatch({ changes: { from, to: from + m[0].length, insert: build(m) } });
+        return;
+      }
+    }
+  }
+}
+
 class ImageWidget extends WidgetType {
   /** `width`/`height` from the Obsidian size param `![[img|300]]` / `![[img|300x200]]`. */
   constructor(readonly src: string, readonly alt: string, readonly width?: number, readonly height?: number) {
@@ -192,24 +235,71 @@ class ImageWidget extends WidgetType {
   eq(o: ImageWidget) {
     return o.src === this.src && o.width === this.width && o.height === this.height;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const wrap = document.createElement('span');
     wrap.className = 'cm-image-wrap';
     const img = document.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
     img.className = 'cm-embed-image image-embed';
+    img.draggable = false;
     if (this.width) img.width = this.width;
     if (this.height) img.height = this.height;
     // Missing attachment → Obsidian-style "could not be found" box.
     img.onerror = () => {
       img.remove();
+      wrap.querySelectorAll('.cm-image-resize').forEach((h) => h.remove());
       const miss = document.createElement('span');
       miss.textContent = '';
       wrap.appendChild(miss);
       embedNotFound(miss, this.alt);
     };
+    // Plain click (no drag) → full-screen zoom/pan viewer.
+    img.addEventListener('click', (e) => {
+      e.preventDefault();
+      openLightbox(this.src, this.alt);
+    });
     wrap.appendChild(img);
+
+    // Drag-to-resize — left/right edge bars; width is written back as `|W`,
+    // keeping aspect ratio (height auto), like Obsidian's image resize.
+    const startResize = (e: MouseEvent | TouchEvent, side: 'left' | 'right') => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = pointX(e);
+      const startW = img.getBoundingClientRect().width;
+      const maxW = Math.max(80, view.contentDOM.clientWidth);
+      let curW = Math.round(startW);
+      wrap.classList.add('is-resizing');
+      const onMove = (ev: MouseEvent | TouchEvent) => {
+        if ('touches' in ev) ev.preventDefault();
+        const dx = pointX(ev) - startX;
+        curW = Math.min(maxW, Math.max(40, Math.round(side === 'right' ? startW + dx : startW - dx)));
+        img.style.width = curW + 'px';
+        img.style.height = 'auto';
+        img.setAttribute('width', String(curW));
+        img.removeAttribute('height');
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', onUp);
+        wrap.classList.remove('is-resizing');
+        writeImageWidth(view, wrap, curW);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', onUp);
+    };
+    for (const side of ['left', 'right'] as const) {
+      const h = document.createElement('span');
+      h.className = `cm-image-resize cm-image-resize-${side}`;
+      h.addEventListener('mousedown', (e) => startResize(e, side));
+      h.addEventListener('touchstart', (e) => startResize(e, side), { passive: false });
+      wrap.appendChild(h);
+    }
     return wrap;
   }
 }
@@ -2255,13 +2345,25 @@ function buildDecorations(view: EditorView): DecorationSet {
         const s = line.from + m.index;
         const e = s + m[0].length;
         if (touches(s, e) || inCode(s, e)) continue;
-        const alt = m[1];
+        // size param lives in the alt text: `![alt|300](url)` / `![|300x200](url)`
+        let alt = m[1];
+        let w: number | undefined;
+        let h: number | undefined;
+        const ai = alt.lastIndexOf('|');
+        if (ai >= 0) {
+          const sm = alt.slice(ai + 1).match(/^\s*([0-9]+)\s*(?:x\s*([0-9]+)\s*)?$/);
+          if (sm) {
+            w = Number(sm[1]);
+            h = sm[2] ? Number(sm[2]) : undefined;
+            alt = alt.slice(0, ai);
+          }
+        }
         const url = m[2].replace(/\s+"[^"]*"$/, '').trim();
         // Browser-loadable URLs load directly; anything else (a relative path or
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
         const src = webLoadable ? url : attachmentUrl(url.split('/').pop() || url);
-        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt) }));
+        pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h) }));
       }
 
       // Markdown links [text](url) — not preceded by ! (those are images)

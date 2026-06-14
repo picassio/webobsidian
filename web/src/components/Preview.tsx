@@ -5,6 +5,7 @@ import { languages } from '@codemirror/language-data';
 import { useStore } from '../lib/store';
 import { renderMarkdown } from '../lib/markdown';
 import { calloutIconSvg } from '../lib/callouts';
+import { openLightbox } from '../lib/imageLightbox';
 import { api } from '../lib/api';
 
 /** Syntax-highlight a `<code class="language-x">` block with the SAME CodeMirror
@@ -187,6 +188,13 @@ export default function Preview({ source }: { source?: string }) {
   }, [html]);
 
   const onClick = (e: React.MouseEvent) => {
+    // Click an embedded image → full-screen zoom/pan viewer.
+    const imgEl = e.target as HTMLElement;
+    if (imgEl instanceof HTMLImageElement) {
+      e.preventDefault();
+      openLightbox(imgEl.currentSrc || imgEl.src, imgEl.alt);
+      return;
+    }
     const target = (e.target as HTMLElement).closest('[data-wikilink]') as HTMLElement | null;
     if (target) {
       e.preventDefault();

@@ -598,7 +598,7 @@ button { font-family: inherit; }
   border: 1px solid var(--bg-modifier-border); border-radius: var(--radius-s);
   background: #fff; resize: vertical; overflow: auto; }
 .markdown-preview blockquote { border-left: 3px solid var(--interactive-accent); margin: .8em 0; padding: 2px 24px; color: var(--text-normal); }
-.markdown-preview img { max-width: 100%; border-radius: var(--radius); }
+.markdown-preview img { max-width: 100%; border-radius: var(--radius); cursor: zoom-in; }
 .markdown-preview table { border-collapse: collapse; margin: .6em 0; }
 .markdown-preview th, .markdown-preview td { border: 1px solid var(--bg-modifier-border); padding: 4px 10px; text-align: left; vertical-align: top; }
 .markdown-preview th { font-weight: 600; background: var(--bg-secondary); }
@@ -1645,3 +1645,46 @@ button { font-family: inherit; }
 .canvas-swatch-custom { position: relative; overflow: hidden; background: conic-gradient(from 0deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
 .canvas-swatch-custom input[type='color'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: pointer; }
 .canvas-ctx-del { color: var(--text-error, #e5534b) !important; margin-left: 2px; }
+
+/* ---- Embedded images: drag-to-resize (Live Preview) + click-to-zoom (FR-2) ---- */
+.cm-image-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.cm-image-wrap img.cm-embed-image {
+  max-width: 100%; height: auto; border-radius: var(--radius);
+  cursor: zoom-in; display: block;
+}
+.cm-image-wrap.is-resizing { user-select: none; }
+.cm-image-wrap.is-resizing img.cm-embed-image { cursor: ew-resize; }
+/* Left/right edge bars — appear on hover, drag to set width (Obsidian-style). */
+.cm-image-resize {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 48px; max-height: 60%;
+  border-radius: 5px; background: var(--interactive-accent);
+  border: 2px solid var(--background-primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+  opacity: 0; cursor: ew-resize; z-index: 4; transition: opacity .12s ease;
+}
+.cm-image-resize-left { left: 5px; }
+.cm-image-resize-right { right: 5px; }
+.cm-image-wrap:hover .cm-image-resize,
+.cm-image-wrap.is-resizing .cm-image-resize { opacity: .9; }
+
+/* ---- Full-screen image viewer (lightbox) — both Live & Reading ---- */
+.image-lightbox {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(0, 0, 0, .85); overflow: hidden;
+  touch-action: none; user-select: none;
+}
+.image-lightbox-img {
+  position: absolute; top: 0; left: 0;
+  transform-origin: 0 0; cursor: grab;
+  will-change: transform; -webkit-user-drag: none;
+}
+.image-lightbox-img:active { cursor: grabbing; }
+.image-lightbox-close {
+  position: absolute; top: 16px; right: 16px; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(0, 0, 0, .4); color: #fff; border: none; cursor: pointer;
+}
+.image-lightbox-close:hover { background: rgba(255, 255, 255, .18); }
+.image-lightbox-close svg { width: 22px; height: 22px; }

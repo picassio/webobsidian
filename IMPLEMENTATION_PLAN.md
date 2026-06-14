@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-12 (M3.6 — Trash UI FR-1: xem/Restore/xoá vĩnh viễn/Empty trash + setting deleteMode trash|permanent; verified end-to-end qua API trên vault tạm)
+Cập nhật lần cuối: 2026-06-14 (Phase 26 — Ảnh resize + zoom lightbox FR-2: kéo handle resize ghi `|W` vào source [wikilink + markdown image], click ảnh mở lightbox wheel/pinch zoom + pan ở cả Live & Reading; typecheck sạch)
 
 ---
 
@@ -377,7 +377,29 @@ Cập nhật lần cuối: 2026-06-12 (M3.6 — Trash UI FR-1: xem/Restore/xoá 
 - [x] M25.6 Tạo canvas mới: store `newCanvas(dir)` (Untitled.canvas né trùng, body `{"nodes":[],"edges":[]}`);
       "New canvas" vào context menu FileTree (file/folder/root) + command palette. Typecheck web sạch.
 
+## Phase 26 — Ảnh: resize + zoom lightbox (FR-2, PRD 1.2, theo yêu cầu người dùng)
+- [x] M26.1 `web/src/lib/imageLightbox.ts`: lightbox toàn màn hình singleton (gắn `document.body`).
+      Wheel zoom theo con trỏ + pinch 2-ngón theo tâm (transform-origin 0 0, công thức giữ điểm cố định),
+      kéo chuột/1-ngón pan, double-click reset (fit ≤ natural), Esc/click nền/nút × để đóng; listener pan
+      gắn theo từng lần kéo nên không rò.
+- [x] M26.2 Live Preview `ImageWidget` (livePreview.ts): 2 handle cạnh trái/phải hiện khi hover, kéo đổi
+      rộng (clamp 40..contentDOM width, giữ tỉ lệ). `writeImageWidth()` recover vị trí qua `posAtDOM`, tìm
+      lại token embed phủ vị trí đó và ghi size param: `![[img|W]]` (wikilink) / `![alt|W](url)` (markdown) —
+      thay segment số cuối nếu có, không thì append. Click ảnh (không kéo) → `openLightbox`.
+- [x] M26.3 Size param cho ảnh markdown `![](…)`: alt mang `|W`/`|WxH` → width/height ở **cả** Live
+      (livePreview.ts imgRe) lẫn Reading (markdown.ts) — trước chỉ wikilink `![[…]]` mới có size.
+- [x] M26.4 Reading view (Preview.tsx) click `<img>` → `openLightbox(currentSrc, alt)`; CSS handle resize
+      (`.cm-image-resize`) + `.image-lightbox*` + cursor `zoom-in`. Typecheck sạch.
+
 ### Nhật ký tiến độ
+- 2026-06-14 (Phase 26 — Ảnh: resize + zoom lightbox theo yêu cầu người dùng): (1) **kéo để resize** ảnh
+  nhúng — 2 thanh handle trái/phải hiện khi hover trong Live Preview, kéo đổi rộng (clamp 40..bề rộng content,
+  giữ tỉ lệ height auto) và **ghi lại vào source** dạng size param Obsidian qua `writeImageWidth()`:
+  `![[img|W]]` cho wikilink embed, `![alt|W](url)` cho ảnh markdown (recover vị trí widget qua `posAtDOM` rồi
+  re-match token phủ vị trí). (2) **Size param cho ảnh markdown** `![](…)`: alt mang `|W`/`|WxH` nay áp dụng
+  width/height ở cả Live (imgRe) lẫn Reading (markdown.ts) — trước chỉ `![[…]]`. (3) **Lightbox zoom**
+  (`lib/imageLightbox.ts`): click ảnh ở cả 2 mode → overlay toàn màn hình; wheel zoom theo con trỏ, pinch
+  2-ngón theo tâm, kéo/1-ngón pan, double-click reset, Esc/click nền/× đóng. Typecheck sạch. Build + deploy prod.
 - 2026-06-13 (Phase 25s — Canvas drag handle + fix node lẹm trái trên mobile): (1) **drag handle** (grip
   chấm) nổi trên đỉnh mỗi node — tap/giữ-kéo để di chuyển node (tiện cho touch); hiện khi hover/selected và
   **luôn hiện trên mobile**; `onPointerDown→beginNodeDrag`, `touch-action:none`. (2) **fix node bị lẹm một
