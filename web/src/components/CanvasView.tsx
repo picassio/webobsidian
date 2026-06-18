@@ -865,15 +865,15 @@ export default function CanvasView() {
       commitTextEdit();
     }
     try { vpRef.current?.setPointerCapture(e.pointerId); } catch { /* synthetic/inactive pointer */ }
-    // Obsidian model: left-drag on empty canvas = rubber-band select (Shift = add
-    // to selection). Pan = hold Space, or use a middle/right drag. On touch a single
-    // finger still pans (two fingers pinch/zoom); selection there is via the toolbar.
-    if (space.current || e.pointerType === 'touch') {
+    // Plain left-drag on empty canvas = PAN (per user preference); Shift+drag (mouse)
+    // = marquee select. Pan also via Space-drag and middle/right-drag (handled above);
+    // a single finger pans on touch (two fingers pinch/zoom).
+    if (e.shiftKey && !space.current && e.pointerType !== 'touch') {
+      const c = toCanvas(e.clientX, e.clientY);
+      drag.current = { mode: 'marquee', cx: c.x, cy: c.y, additive: true };
+    } else {
       drag.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, tx: view.tx, ty: view.ty, moved: false };
       if (vpRef.current && e.pointerType !== 'touch') vpRef.current.style.cursor = 'grabbing';
-    } else {
-      const c = toCanvas(e.clientX, e.clientY);
-      drag.current = { mode: 'marquee', cx: c.x, cy: c.y, additive: e.shiftKey };
     }
   };
 

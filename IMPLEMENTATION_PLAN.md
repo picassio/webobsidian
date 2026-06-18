@@ -376,9 +376,10 @@ Cập nhật lần cuối: 2026-06-18 (Phase 30 — Canvas: marquee drag-select 
       `Workspace.tsx` (render CanvasView khi path `.canvas`, không phải folder/graph). CSS `.canvas-*`.
 - [x] M25.6 Tạo canvas mới: store `newCanvas(dir)` (Untitled.canvas né trùng, body `{"nodes":[],"edges":[]}`);
       "New canvas" vào context menu FileTree (file/folder/root) + command palette. Typecheck web sạch.
-- [x] M25.7 **Marquee drag-select + alignment snap (parity Obsidian, reverse-engineer asar):** đổi mô hình
-      con trỏ — **kéo trái trên nền = marquee chọn** (Shift = cộng dồn), pan = Space/giữa/phải-kéo, touch 1-ngón
-      vẫn pan. Kéo node: snap cạnh/tâm vào các node khác (`snapMove` trong canvas.ts, port `getSnapping/O3/P3`,
+- [x] M25.7 **Marquee select (Shift+kéo) + alignment snap (parity Obsidian, reverse-engineer asar):** kéo trái
+      trên nền = **pan** (giữ theo ý người dùng — bỏ thử nghiệm marquee-mặc-định), **Shift+kéo = marquee chọn**;
+      pan cũng qua Space/giữa/phải-kéo, touch 1-ngón pan. Kéo node: snap cạnh/tâm vào các node khác (`snapMove`
+      trong canvas.ts, port `getSnapping/O3/P3`,
       điểm snap = 4 góc + tâm, dist = `ceil(15/scale)`), vẽ **guide line** (`.canvas-snaps`); Alt (⌃ trên mac) tắt
       snap; Shift khi kéo = khoá trục. Verify CDP: marquee chọn 5 node, guide hiện khi căn rồi mất khi thả.
 - [x] M25.8 **Phím tắt format trong text card** (mirror `obsidianKeymap`): ⌘B/I/K(add link)/L(task)/`⌘/`(comment)

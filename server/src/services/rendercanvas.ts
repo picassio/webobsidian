@@ -148,13 +148,49 @@ export async function renderCanvasHtml(raw: string, fileUrl: (p: string) => stri
     return `<path d="${d}" fill="none" stroke="${escapeHtml(col)}" stroke-width="2"${markerEnd}${markerStart} style="color:${escapeHtml(col)}" />`;
   }).join('\n');
 
-  return `<div class="canvas-static-scroll"><div class="canvas-static" style="width:${W}px;height:${H}px">
+  return `<div class="canvas-public-viewport" id="cv-viewport">
+<div class="canvas-static" id="cv-world" data-w="${W}" data-h="${H}" style="width:${W}px;height:${H}px">
 <svg class="canvas-edges" style="overflow:visible;position:absolute;left:0;top:0;width:1px;height:1px">
 <defs><marker id="cv-arrow" markerWidth="14" markerHeight="14" refX="11" refY="5.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0 L11,5.5 L0,11 Z" fill="context-stroke" /></marker></defs>
 ${edgeSvg}
 </svg>
 ${nodeHtml}
-</div></div>`;
+</div>
+<div class="canvas-public-controls">
+<button id="cv-zout" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
+<button id="cv-fit" type="button" title="Fit to screen" aria-label="Fit to screen">&#9974;</button>
+<button id="cv-zin" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+</div>
+</div>`;
+}
+
+/** Inline pan/zoom controller for the public canvas (CSP nonce required). Drives
+ *  the #cv-world transform: drag = pan, wheel/pinch = zoom-to-cursor, fit on load. */
+export function canvasViewerScript(nonce: string): string {
+  return `<script nonce="${nonce}">
+(function(){
+  var vp=document.getElementById('cv-viewport'),world=document.getElementById('cv-world');
+  if(!vp||!world)return;
+  var W=parseFloat(world.dataset.w)||world.offsetWidth,H=parseFloat(world.dataset.h)||world.offsetHeight;
+  var scale=1,tx=0,ty=0;
+  function clampS(s){return Math.min(4,Math.max(0.05,s));}
+  function apply(){world.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';}
+  function fit(){var r=vp.getBoundingClientRect(),pad=56;scale=clampS(Math.min((r.width-pad)/W,(r.height-pad)/H,1.5));tx=(r.width-W*scale)/2;ty=(r.height-H*scale)/2;apply();}
+  function zoomAt(px,py,f){var ns=clampS(scale*f),k=ns/scale;tx=px-(px-tx)*k;ty=py-(py-ty)*k;scale=ns;apply();}
+  vp.addEventListener('wheel',function(e){e.preventDefault();var r=vp.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.0015));},{passive:false});
+  var pts={},dragId=null,lx=0,ly=0,pinch=null;
+  vp.addEventListener('pointerdown',function(e){if(e.target.closest('.canvas-public-controls'))return;vp.setPointerCapture(e.pointerId);pts[e.pointerId]={x:e.clientX,y:e.clientY};var ids=Object.keys(pts);if(ids.length===1){dragId=e.pointerId;lx=e.clientX;ly=e.clientY;}else if(ids.length===2){dragId=null;var a=pts[ids[0]],b=pts[ids[1]];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)||1};}});
+  vp.addEventListener('pointermove',function(e){if(!pts[e.pointerId])return;pts[e.pointerId]={x:e.clientX,y:e.clientY};var ids=Object.keys(pts);if(pinch&&ids.length>=2){var a=pts[ids[0]],b=pts[ids[1]],nd=Math.hypot(a.x-b.x,a.y-b.y)||1,r=vp.getBoundingClientRect();zoomAt((a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top,nd/pinch.d);pinch.d=nd;}else if(dragId===e.pointerId){tx+=e.clientX-lx;ty+=e.clientY-ly;lx=e.clientX;ly=e.clientY;apply();}});
+  function up(e){delete pts[e.pointerId];try{vp.releasePointerCapture(e.pointerId);}catch(_){}if(Object.keys(pts).length<2)pinch=null;if(e.pointerId===dragId)dragId=null;}
+  vp.addEventListener('pointerup',up);vp.addEventListener('pointercancel',up);
+  function c(id,f){var el=document.getElementById(id);if(el)el.addEventListener('click',function(){var r=vp.getBoundingClientRect();f(r);});}
+  c('cv-zin',function(r){zoomAt(r.width/2,r.height/2,1.2);});
+  c('cv-zout',function(r){zoomAt(r.width/2,r.height/2,1/1.2);});
+  c('cv-fit',function(){fit();});
+  window.addEventListener('resize',fit);
+  fit();
+})();
+</script>`;
 }
 
 /** Plain-text excerpt of a canvas (its text nodes) for the meta description. */
