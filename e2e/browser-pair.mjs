@@ -26,6 +26,7 @@ try {
   let pageA = await contextA.newPage(); let pageB = await contextB.newPage();
   await loginAndPair(pageA, 'Browser A');
   await loginAndPair(pageB, 'Browser B');
+  await verifyExternalPairingCodeUi(pageA);
 
   const [differentA, differentB] = await Promise.all([
     operation(pageA, createOperation('Different-A.md', 'from A')),
@@ -116,6 +117,15 @@ async function waitForServer() {
   await waitFor(async () => {
     try { return (await fetch(`${base}/auth/status`)).ok; } catch { return false; }
   }, 20_000, () => `server failed to start\n${serverLog}`);
+}
+async function verifyExternalPairingCodeUi(page) {
+  await page.locator('button[title="Settings"]').first().click();
+  await page.getByRole('button', { name: 'Central Sync' }).click();
+  await page.getByLabel('Pairing device name').fill('Browser E2E external client');
+  await page.getByRole('button', { name: 'Create pairing code' }).click();
+  const code = await page.getByLabel('One-use pairing code').inputValue();
+  assert.match(code, /^pair_[A-Za-z0-9_-]{32}$/u);
+  await page.locator('.modal-bg').click({ position: { x: 4, y: 4 } });
 }
 async function loginAndPair(page, name) {
   await page.goto(base);

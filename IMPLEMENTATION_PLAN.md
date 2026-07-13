@@ -500,8 +500,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       clean open file auto apply ≤2s, dirty file conflict state.
 - [x] M35.5 Conflict UI: side-by-side/base-current-local diff, keep server/keep local/save merged/create copy;
       binary metadata/download; unresolved badge/toast không chặn file khác.
-- [x] M35.6 Settings → Sync: pairing codes, device list/last seen/revoke, conflict center, journal/doctor health,
-      scope/exclude policy và diagnostics export redacted.
+- [~] M35.6 Settings → Sync: pairing codes, device list/last seen/revoke, conflict center, journal/doctor health,
+      scope/exclude policy và diagnostics export redacted. Real-use audit found the API existed without the promised
+      external-client pairing control; the UI and production-browser regression are implemented, live validation active.
 - [x] M35.7 Status UI `Synced/Syncing/Offline/Conflict/Error` + sequence lag; tách hoàn toàn Git backup status.
 - [x] M35.8 Đổi `uistate.json` sang per-device workspace mặc định; migration từ shared state; mobile drawer/
       clipboard vẫn local; không còn thiết bị A tự chuyển tab thiết bị B.
@@ -612,6 +613,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Real-use external pairing UX audit): opening Settings → Central Sync as an operator exposed that
+  browser self-pairing worked but the documented 10-minute one-use code for Obsidian/headless clients had no UI.
+  Added a device-name hint, explicit Create pairing code action, read-only one-use code/expiry display and clipboard
+  action without diagnostics persistence. Browser E2E now generates and schema-checks a real code through rendered
+  Settings, and the standalone command now rebuilds the SPA before execution so stale `server/public` cannot mask UI
+  regressions. Typecheck and the expanded browser E2E pass; live deployed UI/client validation is in progress.
 - 2026-07-13 (Compose IPv4 health regression): a production-like source deployment exposed that Compose overrode
   the already-correct Dockerfile healthcheck with `localhost`; Alpine resolved it to IPv6 while Node listened on IPv4,
   producing false `unhealthy` state despite a healthy API. Changed Compose to `127.0.0.1`, added a CI contract

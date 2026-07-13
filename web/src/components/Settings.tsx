@@ -79,6 +79,8 @@ function SyncSettings() {
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [selected, setSelected] = useState<{ conflict: Conflict; base: string | null; server: string; client: string; binary: boolean } | null>(null);
   const [merged, setMerged] = useState('');
+  const [pairingHint, setPairingHint] = useState('New sync client');
+  const [pairingCode, setPairingCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const persistence = useRef(new IndexedDbSyncPersistence()).current;
@@ -112,6 +114,15 @@ function SyncSettings() {
       window.location.reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Pairing failed');
+    } finally { setBusy(false); }
+  };
+  const createPairingCode = async () => {
+    setBusy(true); setError(''); setPairingCode(null);
+    try {
+      const created = await api.createSyncPairingCode(pairingHint.trim() || 'New sync client');
+      setPairingCode({ code: created.code, expiresAt: created.expiresAt });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to create pairing code');
     } finally { setBusy(false); }
   };
   const inspectConflict = async (conflict: Conflict) => {
@@ -197,6 +208,32 @@ function SyncSettings() {
           {busy ? 'Working…' : localDevice ? 'Paired' : 'Pair this browser'}
         </button>
       </Row>
+      <Row name="Pair Obsidian or headless client" desc="Create a 10-minute, one-use code. The device receives its own revocable credential.">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <input
+            className="text-input"
+            aria-label="Pairing device name"
+            value={pairingHint}
+            onChange={(event) => setPairingHint(event.target.value)}
+            style={{ width: 180 }}
+          />
+          <button className="btn" type="button" disabled={busy} onClick={createPairingCode}>
+            {busy ? 'Working…' : 'Create pairing code'}
+          </button>
+        </div>
+      </Row>
+      {pairingCode && (
+        <div style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 8, padding: 12, margin: '12px 0' }}>
+          <label>
+            One-use pairing code
+            <input className="text-input" aria-label="One-use pairing code" readOnly value={pairingCode.code} style={{ width: '100%', marginTop: 6 }} />
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            <button className="btn secondary" type="button" onClick={() => void navigator.clipboard.writeText(pairingCode.code)}>Copy code</button>
+            <span className="desc">Expires {new Date(pairingCode.expiresAt).toLocaleString()}; generating another code invalidates this display.</span>
+          </div>
+        </div>
+      )}
       {error && <div role="alert" style={{ color: 'var(--text-error)', margin: '12px 0' }}>{error}</div>}
       <h3>Conflict center {conflicts.length > 0 && `(${conflicts.length})`}</h3>
       {conflicts.length === 0 && <p className="desc">No unresolved conflicts.</p>}
