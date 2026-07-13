@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.7 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.8 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -529,11 +529,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       delete bị defer khi path/subtree có pending/queued local work hoặc editor buffer khác disk; startup đợi
       workspace layout restore để apply-intent recovery nhìn thấy open editors; overlap tạo exact conflict copy.
 - [x] M36.6 Plugin UX: status bar, Notice/commands Sync now/Pause/Status/Conflicts/Reconnect/Reset state,
-      conflict view/resolve và redacted diagnostics export.
+      conflict view/resolve và redacted diagnostics export; unresolved badge được refresh từ authoritative server
+      sau startup, mỗi successful sync và mỗi modal resolution, không reset sai về 0 khi restart.
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.7 bytes complete the Linux matrix:
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.8 bytes complete the Linux matrix:
       concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
       exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
@@ -609,6 +610,14 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Authoritative conflict badge + exact plugin 0.1.8): restart after the open-editor drills exposed
+  that two unresolved server conflicts remained durable/listable but the plugin status/diagnostics reset their
+  in-memory count to zero, violating M36.6 visibility. Successful sync now refreshes the count from the authenticated
+  authoritative conflict endpoint; modal resolution invokes the same refresh before re-rendering. Exact 0.1.8 bytes
+  on real Obsidian 1.12.7 restored 2 conflicts after restart at cursor 7, changed immediately to 1 after **Keep
+  server**, restored 1 across another restart, then reached 0/“No unresolved conflicts” after resolving the last
+  record at cursor 9 with zero queue/pending/apply intents. Public source/tag `a533066`/0.1.8; release CI
+  29247571867 and Node 20/22/24 CI 29247570394 passed; `main.js` SHA-256 is `7a3db095…49c0`. External gates remain.
 - 2026-07-13 (Native plugin startup reconciliation scalability + exact 0.1.7): Community load-time audit found
   every startup path was persisted twice (queue marker then removal) even when kind/hash matched projection; each
   save serialized the full projection, while `entryByPath`/`entryById` linearly scanned it. Large-vault startup was

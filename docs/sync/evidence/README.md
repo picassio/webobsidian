@@ -1,5 +1,20 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.8-release.png`
+
+The authoritative-conflict-status candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
+`central-vault-sync` 0.1.8: SHA-256 `7a3db095…49c0` (`main.js`), `d5905427…faaa` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows version 0.1.8 enabled and synchronized.
+
+Restarting 0.1.7 over two durable unresolved server conflicts exposed a status defect: diagnostics and the status
+bar reset to zero because the count existed only in memory, even though the conflict modal still listed both.
+Version 0.1.8 refreshes the count from the authenticated authoritative conflict endpoint after startup, every
+successful synchronization, and each modal resolution. In the exact-byte drill, restart restored **2 conflicts**
+while synchronized at cursor 7. Resolving the first through **Keep server** advanced cursor/client sequence and
+immediately changed the badge to **1 conflict**; restarting exact 0.1.8 restored that count. Resolving the final
+record updated the modal to **No unresolved conflicts**, advanced cursor to 9, and removed the badge with zero
+queue/pending/apply intents. Prior 0.1.7 startup-scaling and 0.1.6 editor-safety evidence remains applicable.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.7-release.png`
 
 The startup-reconciliation candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
