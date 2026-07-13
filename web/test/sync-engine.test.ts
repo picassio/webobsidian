@@ -3,6 +3,7 @@ import test from 'node:test';
 import { sha256Text, type OperationResult, type SyncEvent, type SyncOperation } from '@picassio/sync-core';
 import { BrowserSyncEngine, type LocalSyncAdapter, type SyncTransport } from '../src/lib/sync-engine.js';
 import { BrowserLocalSyncAdapter } from '../src/lib/browser-sync-adapter.js';
+import { ensureUploadDirectories } from '../src/lib/browser-sync-runtime.js';
 import { useStore } from '../src/lib/store.js';
 import type { BrowserDeviceState, LocalApplyIntent, LocalEntryProjection, PendingAttachment, PersistedDraft, SyncPersistence } from '../src/lib/sync-db.js';
 
@@ -64,6 +65,27 @@ function transport(events: SyncEvent[]): SyncTransport & { acknowledged: number[
     async connectWake() { return () => {}; },
   };
 }
+
+test('attachment preparation queues missing parent directories once before file sequence allocation', async () => {
+  const persistence = new MemoryPersistence();
+  persistence.projections = [{ entryId: 'entry_assets', path: 'assets', revision: 1, hash: null, size: 0, deleted: false }];
+  persistence.queued = [{ operation: 'mkdir', path: 'queued', kind: 'directory', clientSequence: 1, idempotencyKey: 'queued-dir' }];
+  persistence.device = { ...persistence.device!, nextClientSequence: 2 };
+  const queued: SyncOperation[] = [];
+  const known = new Set<string>();
+  const engine = { async queue(operation: SyncOperation) { queued.push(operation); } };
+
+  await ensureUploadDirectories(persistence, engine, 'attachments/images', known);
+  await ensureUploadDirectories(persistence, engine, 'attachments/images', known);
+  await ensureUploadDirectories(persistence, engine, 'assets', known);
+  await ensureUploadDirectories(persistence, engine, 'queued', known);
+
+  assert.deepEqual(queued.map((operation) => ({ operation: operation.operation, path: 'path' in operation ? operation.path : null, clientSequence: operation.clientSequence })), [
+    { operation: 'mkdir', path: 'attachments', clientSequence: 2 },
+    { operation: 'mkdir', path: 'attachments/images', clientSequence: 3 },
+  ]);
+  assert.equal(persistence.device?.nextClientSequence, 4);
+});
 
 test('cursor advances only after durable apply intent and local materialization', async () => {
   const persistence = new MemoryPersistence();

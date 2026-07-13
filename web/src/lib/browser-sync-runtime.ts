@@ -1,12 +1,18 @@
 import { DEFAULT_LIMITS, normalizeVaultPath, sha256Chunks, sha256Text, type SyncOperation } from '@picassio/sync-core';
 import { api } from './api';
 import { BrowserLocalSyncAdapter } from './browser-sync-adapter';
-import { IndexedDbSyncPersistence, type PendingAttachment } from './sync-db';
+import { IndexedDbSyncPersistence, type PendingAttachment, type SyncPersistence } from './sync-db';
 import { BrowserSyncEngine, HttpSyncTransport } from './sync-engine';
 import { registerSyncSaveHandler, useStore, type DocumentState } from './store';
 
 let activeEngine: BrowserSyncEngine | null = null;
-let activeUpload: { persistence: IndexedDbSyncPersistence; transport: HttpSyncTransport; engine: BrowserSyncEngine } | null = null;
+let activeUpload: {
+  persistence: IndexedDbSyncPersistence;
+  transport: HttpSyncTransport;
+  engine: BrowserSyncEngine;
+  knownDirectories: Set<string>;
+} | null = null;
+let uploadPreparation: Promise<void> = Promise.resolve();
 
 export async function initializeBrowserSync(): Promise<() => void> {
   const persistence = new IndexedDbSyncPersistence();
@@ -33,7 +39,12 @@ export async function initializeBrowserSync(): Promise<() => void> {
   });
   activeEngine?.stop();
   activeEngine = engine;
-  activeUpload = { persistence, transport, engine };
+  activeUpload = {
+    persistence,
+    transport,
+    engine,
+    knownDirectories: new Set((await persistence.entries()).filter((entry) => !entry.deleted).map((entry) => entry.path.toLocaleLowerCase('en-US'))),
+  };
 
   registerSyncSaveHandler(async (document: DocumentState) => {
     await flushAttachments(persistence, transport, engine);
@@ -75,16 +86,61 @@ export async function initializeBrowserSync(): Promise<() => void> {
 export async function uploadBrowserFile(file: File, dir = 'attachments'): Promise<{ path: string; size: number }> {
   if (!activeUpload) return api.upload(file, dir);
   const safeName = file.name.normalize('NFC').replace(/[\\/\u0000-\u001f]/g, '-').trim();
-  const path = normalizeVaultPath(`${dir.replace(/^\/+|\/+$/g, '')}/${safeName}`);
+  const rawDirectory = dir.replace(/^\/+|\/+$/g, '');
+  const directory = rawDirectory ? normalizeVaultPath(rawDirectory) : '';
+  const path = normalizeVaultPath(directory ? `${directory}/${safeName}` : safeName);
   const hash = await sha256Chunks(blobChunks(file));
-  const attachment: PendingAttachment = {
-    idempotencyKey: `web-upload-${crypto.randomUUID()}`,
-    clientSequence: await activeUpload.persistence.takeClientSequence(),
-    path, hash, size: file.size, blob: file, createdAt: new Date().toISOString(),
-  };
-  await activeUpload.persistence.putAttachment(attachment);
-  await flushAttachments(activeUpload.persistence, activeUpload.transport, activeUpload.engine).catch(() => {});
-  return { path, size: file.size };
+  return serializeUploadPreparation(async () => {
+    const upload = activeUpload;
+    if (!upload) return api.upload(file, dir);
+    await ensureUploadDirectories(upload.persistence, upload.engine, directory, upload.knownDirectories);
+    const attachment: PendingAttachment = {
+      idempotencyKey: `web-upload-${crypto.randomUUID()}`,
+      clientSequence: await upload.persistence.takeClientSequence(),
+      path, hash, size: file.size, blob: file, createdAt: new Date().toISOString(),
+    };
+    await upload.persistence.putAttachment(attachment);
+    await flushAttachments(upload.persistence, upload.transport, upload.engine).catch(() => {});
+    return { path, size: file.size };
+  });
+}
+
+export async function ensureUploadDirectories(
+  persistence: SyncPersistence,
+  engine: Pick<BrowserSyncEngine, 'queue'>,
+  directory: string,
+  knownDirectories = new Set<string>(),
+): Promise<void> {
+  if (!directory) return;
+  const existing = new Set((await persistence.entries()).filter((entry) => !entry.deleted).map((entry) => entry.path.toLocaleLowerCase('en-US')));
+  const queued = new Set((await persistence.operations()).flatMap((operation) =>
+    operation.operation === 'mkdir' ? [operation.path.toLocaleLowerCase('en-US')] : [],
+  ));
+  const components = directory.split('/');
+  let current = '';
+  for (const component of components) {
+    current = current ? `${current}/${component}` : component;
+    const key = current.toLocaleLowerCase('en-US');
+    if (existing.has(key) || queued.has(key) || knownDirectories.has(key)) continue;
+    knownDirectories.add(key);
+    try {
+      await engine.queue({
+        operation: 'mkdir', path: current, kind: 'directory',
+        clientSequence: await persistence.takeClientSequence(),
+        idempotencyKey: `web-upload-dir-${crypto.randomUUID()}`,
+      });
+      queued.add(key);
+    } catch (error) {
+      knownDirectories.delete(key);
+      throw error;
+    }
+  }
+}
+
+function serializeUploadPreparation<T>(task: () => Promise<T>): Promise<T> {
+  const run = uploadPreparation.then(task, task);
+  uploadPreparation = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 async function* blobChunks(blob: Blob): AsyncGenerator<Uint8Array> {

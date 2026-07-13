@@ -613,6 +613,13 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Real-use browser attachment parent repair): dragging the first image into a newly paired real browser
+  exposed that attachment upload submitted `attachments/<file>` before the explicit parent directory existed. The
+  coordinator correctly refused materialization, but the optimistic editor embed made the failure non-obvious. Browser
+  upload preparation now serializes sequence allocation, durably queues every missing parent `mkdir` before the file,
+  reuses projected/queued/session-known directories, and preserves order across concurrent drops. A regression covers
+  nested parent creation, duplicate suppression, existing projections, pending offline mkdirs, and sequence ordering;
+  web tests and root typecheck pass. Live redeploy/retest is in progress.
 - 2026-07-13 (Real-use external pairing UX audit): opening Settings → Central Sync as an operator exposed that
   browser self-pairing worked but the documented 10-minute one-use code for Obsidian/headless clients had no UI.
   Added a device-name hint, explicit Create pairing code action, read-only one-use code/expiry display and clipboard
