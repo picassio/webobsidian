@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.6 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.7 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -522,8 +522,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [x] M36.4 Local engine: durable cursor + apply intents + pending offline queue, per-path modify debounce,
       globally serialized mutation preparation (uploads cannot overtake client sequence), automatic offline cold-start
       and foreground-event retry, create/rename/delete/subtree resume, binary chunk batches, idempotent push,
-      ordered pull/ack; không
-      advance cursor khi local apply còn uncertain.
+      ordered pull/ack; indexed projection lookup + unchanged-path reconciliation không persist marker/sequence và
+      yield mỗi 100 paths; không advance cursor khi local apply còn uncertain.
 - [x] M36.5 Remote apply echo suppression theo expected `(path,hash,revision)`; không dùng timing flag;
       handle Obsidian event burst, case-only rename, Unicode normalization và file đang mở. Remote write/rename/
       delete bị defer khi path/subtree có pending/queued local work hoặc editor buffer khác disk; startup đợi
@@ -533,7 +533,7 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.6 bytes complete the Linux matrix:
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.7 bytes complete the Linux matrix:
       concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
       exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
@@ -609,6 +609,18 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Native plugin startup reconciliation scalability + exact 0.1.7): Community load-time audit found
+  every startup path was persisted twice (queue marker then removal) even when kind/hash matched projection; each
+  save serialized the full projection, while `entryByPath`/`entryById` linearly scanned it. Large-vault startup was
+  therefore quadratic I/O/CPU despite correct bytes. `LocalMutationQueue.reconcile()` now hashes/checks existing
+  paths without persisting unchanged work or allocating a sequence, reschedules existing durable markers, rejects
+  path-kind divergence, and yields to the UI every 100 paths. `PluginStore` maintains O(1) path/ID/position indexes
+  across load, manifest replacement, rename, and tombstone updates. Regressions prove unchanged reconciliation has
+  zero writes/sequence use and 10,000-entry lookup bypasses array `find` while retaining exact cardinality through
+  rename/tombstone. Exact 0.1.7 bytes in real Obsidian 1.12.7 completed an instrumented unchanged reconnect at
+  cursor 7/next sequence 4 with zero queue/pending/apply intents and zero `Plugin.saveData` calls. Public source/tag
+  `6f34852`/0.1.7; release CI 29246980083 and Node 20/22/24 CI 29246978388 passed; `main.js` SHA-256 is
+  `29d98721…983e`. Remaining npm/Community/platform/independent-beta/stable gates are unchanged.
 - 2026-07-13 (Unsaved open-editor overwrite repaired + exact plugin 0.1.6): direct M36.5 validation against real
   Obsidian 1.12.7 disproved the completed “file đang mở” claim in 0.1.5. With `Open.md` dirty only in CodeMirror,
   a racing web revision was applied through `Vault.modifyBinary` within 150 ms; Obsidian replaced the unsaved

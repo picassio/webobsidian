@@ -1,5 +1,23 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.7-release.png`
+
+The startup-reconciliation candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
+`central-vault-sync` 0.1.7: SHA-256 `29d98721…983e` (`main.js`), `03676a1b…a790` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows version 0.1.7 enabled and synchronized.
+
+A pre-submission load-time audit found that each startup path previously created and removed a durable pending
+marker even when its projected hash/kind was unchanged. Because every marker save serializes plugin state, a large
+vault caused two full-state writes per unchanged path; path and entry-ID lookup also linearly scanned the complete
+projection. Version 0.1.7 adds in-memory path/ID/position indexes, updates them through rename/tombstone replacement,
+hashes unchanged files without persisting markers or allocating client sequences, and yields to the Obsidian UI
+every 100 paths. A 10,000-entry regression proves lookups do not call the projection array's linear `find`, preserve
+exactly 10,000 entries through rename/tombstone updates, and pass under all supported Node test versions.
+
+The exact-byte Obsidian reconnect over the already converged three-file matrix was instrumented at `Plugin.saveData`:
+it completed synchronized at cursor 7, next client sequence 4, with zero queue/pending/apply intents and **zero
+plugin-data writes** for unchanged reconciliation. The 0.1.6 editor-safety evidence below remains applicable.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.6-release.png`
 
 The open-editor safety candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
