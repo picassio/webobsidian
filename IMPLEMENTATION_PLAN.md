@@ -596,6 +596,13 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Exact plugin 0.1.2 release-asset acceptance): downloaded all three public GitHub assets and verified
+  SHA-256 against release API (`main.js` `4d005b29...`, manifest `bd109090...`, styles `4759b965...`). Installed
+  those exact bytes—not a local build—into a fresh isolated stable Obsidian Linux 1.12.7 vault. The app identified
+  and enabled version 0.1.2, paired once to a fresh production server, pushed a Vault-created note as device
+  sequence 1, then applied a web-authored revision back through Vault at cursor 2 with zero queue/apply intents and
+  no token in plugin data. Screenshot: `docs/sync/evidence/obsidian-linux-1.12.7-plugin-0.1.2-release.png`.
+  This closes release-byte/installability uncertainty on Linux; other real OS/mobile and Community gates remain.
 - 2026-07-13 (Container distribution scope changed by user): user explicitly requested no GitHub/registry
   container publication; consumers clone and build locally. PRD bumped to 1.7 and roadmap/plan/docs/examples/release
   workflow changed in the same update: CI still proves non-root amd64/arm64 builds plus SBOM/provenance, while

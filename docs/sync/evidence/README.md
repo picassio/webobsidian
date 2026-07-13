@@ -1,5 +1,13 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.2-release.png`
+
+Exact public GitHub release assets (`main.js`, `manifest.json`, and `styles.css`) for `central-vault-sync` 0.1.2
+were downloaded and their SHA-256 values matched the release API digests. They were installed into a fresh isolated
+Obsidian Linux 1.12.7 vault—not rebuilt locally. The screenshot shows version 0.1.2 enabled and **Central Sync:
+synced** after one-use pairing, a Vault-created note reaching the server as device sequence 1, and a web-authored
+revision returning through the plugin with cursor 2, no remaining apply intent/queue, and no token in plugin data.
+
 ## `obsidian-linux-1.12.7-plugin.png`
 
 Real Obsidian Linux 1.12.7 running `central-vault-sync` 0.1.1 after:
