@@ -604,6 +604,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   `vercel-labs/skills` repository, and all 30 cited external endpoints return an acceptable live response. Added
   deterministic `npm run lint:docs` validation and required it in both CI and stable publication workflows;
   README documents the command. External reachability remains a manual release probe to avoid flaky CI networking.
+  A follow-up distribution-policy grep also corrected the compatibility table's stale “image publication pending”
+  wording: npm is pending, while registry images are intentionally not offered and local source builds are verified.
   Commit `7524512` passed CI run 29238406643, including the new link gate and the complete 124-test, dual-E2E,
   type/build/API/audit, systemd, attested amd64/arm64 source-build, and non-root smoke matrix.
 - 2026-07-13 (Stable workflow fail-closed publication): audit found the tag workflow could succeed and create
