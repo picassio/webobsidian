@@ -111,8 +111,12 @@ export class OrderedSyncClient {
     this.reconnectTimer = null;
   }
 
-  async queue(operation: SyncOperation): Promise<void> {
+  async enqueue(operation: SyncOperation): Promise<void> {
     await this.persistence.putOperation(operation);
+  }
+
+  async queue(operation: SyncOperation): Promise<void> {
+    await this.enqueue(operation);
     if (this.running) await this.flush().catch(() => this.onStatus('offline', 0));
   }
 
@@ -173,12 +177,12 @@ export class OrderedSyncClient {
 
   private async connectWake(): Promise<void> {
     this.closeWake = await this.transport.connectWake(
-      () => { void this.catchUp().then(() => this.flush()).catch(() => this.onStatus('offline', 0)); },
+      () => { void this.flush().then(() => this.catchUp()).catch(() => this.onStatus('offline', 0)); },
       () => { if (this.running) this.scheduleReconnect(); },
     );
     if (this.pollTimer === null) {
       this.pollTimer = this.scheduler.interval(() => {
-        if (this.running) void this.catchUp().catch(() => this.onStatus('offline', 0));
+        if (this.running) void this.flush().then(() => this.catchUp()).catch(() => this.onStatus('offline', 0));
       }, this.pollMs);
     }
   }

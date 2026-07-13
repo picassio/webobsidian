@@ -613,6 +613,15 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Real Obsidian wake/echo race repair): exact public plugin 0.1.10 on Obsidian Linux 1.12.7 paired
+  to the deployed server and pulled the live browser/headless vault, including the PNG attachment. A real create plus
+  binary upload exposed a timing race: the server wake could start catch-up while the same local path marker was still
+  present, producing a transient `local changes pending ... remote apply deferred` error even though later retry
+  converged. Sync core 0.1.3 now supports durable enqueue-before-publish and orders wake/poll work as flush-before-pull;
+  plugin-side staging clears the path marker only after the operation is durable and before network publication, while
+  idempotent matching echoes avoid unnecessary rewrites. Core wake/staging regressions and plugin marker/echo regressions
+  pass; all 129 repository tests and root typecheck pass. Public core/plugin patch publication and exact-release live
+  rerun are in progress.
 - 2026-07-13 (Real-use browser attachment parent repair): dragging the first image into a newly paired real browser
   exposed that attachment upload submitted `attachments/<file>` before the explicit parent directory existed. The
   coordinator correctly refused materialization, but the optimistic editor embed made the failure non-obvious. Browser

@@ -42,6 +42,66 @@ test('ordered client publishes durable offline work before pulling remote bytes'
   assert.deepEqual(persistence.queued, []);
 });
 
+test('wake waits for durable local flush before pulling the echoed event', async () => {
+  const persistence = new MemoryPersistence();
+  let wake: (() => void) | null = null;
+  let pulls = 0;
+  let queuedAtWakePull = -1;
+  const transport: SyncClientTransport = {
+    async handshake() { return { vaultId: 'vault_core_client_1', latestSequence: 5, minimumRetainedSequence: 1, readOnly: false }; },
+    async manifest() { return { entries: [], snapshotSequence: 5 }; },
+    async operations(operations) {
+      wake?.();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return [{ idempotencyKey: operations[0]!.idempotencyKey, status: 'accepted', sequence: 6 }];
+    },
+    async changes(after) {
+      pulls += 1;
+      if (pulls > 1) queuedAtWakePull = persistence.queued.length;
+      return { events: [], nextAfter: after, hasMore: false, latestSequence: 6 };
+    },
+    async acknowledge() {},
+    async connectWake(callback) { wake = callback; return () => {}; },
+  };
+  const adapter: SyncLocalAdapter = {
+    async apply() {}, async recover() {}, async bootstrap() {}, async conflict() {},
+  };
+  const engine = new OrderedSyncClient(persistence, transport, adapter, () => {});
+  await engine.start();
+  await engine.queue({
+    operation: 'modify', entryId: 'entry_core_client_1', baseRevision: 1,
+    clientSequence: 1, idempotencyKey: 'core-client-wake-operation-1',
+    content: { hash: sha256Text('local'), size: 5, inlineText: 'local' },
+  });
+  for (let attempt = 0; attempt < 20 && queuedAtWakePull < 0; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+  engine.stop();
+  assert.equal(queuedAtWakePull, 0);
+});
+
+test('enqueue durably stages an operation without publishing it', async () => {
+  const persistence = new MemoryPersistence();
+  let published = 0;
+  const transport: SyncClientTransport = {
+    async handshake() { return { vaultId: 'vault_core_client_1', latestSequence: 5, minimumRetainedSequence: 1, readOnly: false }; },
+    async manifest() { return { entries: [], snapshotSequence: 5 }; },
+    async operations(operations) { published += operations.length; return operations.map((operation) => ({ idempotencyKey: operation.idempotencyKey, status: 'accepted' as const, sequence: 6 })); },
+    async changes(after) { return { events: [], nextAfter: after, hasMore: false, latestSequence: 5 }; },
+    async acknowledge() {}, async connectWake() { return () => {}; },
+  };
+  const adapter: SyncLocalAdapter = { async apply() {}, async recover() {}, async bootstrap() {}, async conflict() {} };
+  const engine = new OrderedSyncClient(persistence, transport, adapter, () => {});
+  await engine.start();
+  await engine.enqueue({
+    operation: 'delete', entryId: 'entry_core_client_1', baseRevision: 1,
+    clientSequence: 1, idempotencyKey: 'core-client-staged-operation-1',
+  });
+  assert.equal(published, 0);
+  assert.equal(persistence.queued.length, 1);
+  await engine.flush(); engine.stop();
+  assert.equal(published, 1);
+  assert.equal(persistence.queued.length, 0);
+});
+
 test('ordered client retains apply intent and cursor when local materialization fails', async () => {
   const persistence = new MemoryPersistence();
   const remoteEvent = {
