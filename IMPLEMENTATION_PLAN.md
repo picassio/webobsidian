@@ -596,6 +596,14 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Plugin settings review hardening + 0.1.3): removed the final four Obsidian lint warnings without
+  raising the 1.11.4 minimum. `CentralSyncSettingTab` now has one canonical settings-definition source: Obsidian
+  1.13+ receives searchable declarative settings, while 1.11–1.12 renders those same definitions through a narrow
+  compatibility interpreter (no duplicated settings model). Added control normalization/search-definition test;
+  plugin now passes zero-warning lint, typecheck, 9/9 tests, build and 33-file policy scan. A real Obsidian Linux
+  1.12.7 load rendered both legacy groups. Commit/tag `6627954`/0.1.3 and release CI 29232796996 passed with no
+  annotations; provenance assets are public at https://github.com/picassio/central-vault-sync/releases/tag/0.1.3.
+  Beta issue 1 and root release/compatibility links now target 0.1.3. Community acceptance remains external.
 - 2026-07-13 (External beta feedback channel): opened public plugin issue
   https://github.com/picassio/central-vault-sync/issues/1 with copied/backed-up-vault warning, Windows/macOS/Linux/
   Android/iOS matrix, pair/catch-up/resume/offline/restart/rename/delete/attachment/conflict checklist, redacted
