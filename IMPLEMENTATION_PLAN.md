@@ -603,6 +603,13 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Explicit stable-acceptance audit map): added `docs/sync/ACCEPTANCE_EVIDENCE.md` as the durable
+  FR-13 completion ledger. It maps every PRD DoD 8–14 row and phase 31–40 to current source/tests/CI/releases/
+  screenshots, distinguishes PASS from PARTIAL/BLOCKED without scope waivers, records the source-build-only image
+  policy, and lists exact npm/Community/platform/stable-tag prerequisites. DoD 8, 11, 12, and 13 plus phases
+  31–35 and 38–39 are evidenced PASS; DoD 9/phase 36 and phase 37 are partial; mobile DoD 10, publication DoD 14,
+  and phase 40 remain externally blocked. Roadmap and sync index link the ledger; completion is forbidden until
+  every open row gains concrete artifact/review/platform evidence.
 - 2026-07-13 (npm publication preflight + exact scope blocker): npm authentication now succeeds as `picassio`.
   Both packages pass clean public dry-run with no metadata auto-correction after normalizing repository URLs;
   core tarball SHA-1 `d8710e09...`/SHA-512 `3bFmgg...`, headless `f93d692e...`/`LIIBYA...`. Commit `3d27b5a`

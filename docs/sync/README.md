@@ -14,6 +14,8 @@ These files implement the contract in [`../SYNC_ROADMAP.md`](../SYNC_ROADMAP.md)
   and explicit capacity stop conditions.
 - [`COMPATIBILITY.md`](COMPATIBILITY.md) — rolling upgrade matrix/policy, rollback, mobile limits, privacy,
   troubleshooting, and support/security channels.
+- [`ACCEPTANCE_EVIDENCE.md`](ACCEPTANCE_EVIDENCE.md) — explicit PRD DoD 8–14 and phase 31–40 evidence map,
+  remaining external blockers, and the stable completion rule.
 
 Current consumers:
 

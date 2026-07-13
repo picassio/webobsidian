@@ -794,7 +794,8 @@ Product and repository:
 - [`PRD.md`](../PRD.md), especially FR-4, FR-13, NFRs, API/data model, risks, and DoD 8–14.
 - [`sync/openapi-v1.yaml`](sync/openapi-v1.yaml), generated
   [`sync/protocol-v1.schema.json`](sync/protocol-v1.schema.json), and
-  [`sync/README.md`](sync/README.md) are the executable protocol artifacts.
+  [`sync/README.md`](sync/README.md) are the executable protocol artifacts; the live stable-gate audit is
+  [`sync/ACCEPTANCE_EVIDENCE.md`](sync/ACCEPTANCE_EVIDENCE.md).
 - [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md), phases 31–40 and progress journal.
 - Current mutation/watcher baseline: `server/src/routes/files.ts`, `server/src/routes/agent.ts`,
   `server/src/services/vault.ts`, `server/src/services/git.ts`, `server/src/index.ts`, `web/src/App.tsx`, and
