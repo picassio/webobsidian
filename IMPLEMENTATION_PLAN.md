@@ -596,6 +596,11 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (systemd lifecycle claim correction): audit found shipped `ExecReload=SIGHUP` although the CLI only
+  handles SIGTERM/SIGINT; SIGHUP would terminate/restart rather than reload configuration. Removed the unsupported
+  directive and documented `systemctl restart` after changes. Added a regression test binding unit claims to the
+  implemented Type=simple/watch/credential/stop/security behavior. Fresh headless 10/10 (including 1 GiB),
+  typecheck, `systemd-analyze verify`, and diff-check pass.
 - 2026-07-13 (Clean npm artifact install): packed current `@webobsidian/sync-core` 0.1.1 and
   `web-vault-sync` 0.1.0, then installed only those two tarballs into a fresh directory with no workspace links.
   The installed ESM core imports and reports Protocol 1.0; the package-local `web-vault-sync` bin runs `help`,

@@ -69,7 +69,8 @@ systemctl status web-vault-sync
 sudo -u web-vault-sync web-vault-sync --config-dir /var/lib/web-vault-sync doctor --json
 ```
 
-The unit intentionally uses `Type=simple`; it does not claim `sd_notify` watchdog support.
+The unit intentionally uses `Type=simple`; it does not claim `sd_notify` watchdog or in-place reload support.
+Use `systemctl restart web-vault-sync` after configuration changes.
 
 ## Docker
 
