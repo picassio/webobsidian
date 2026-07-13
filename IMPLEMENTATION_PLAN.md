@@ -604,6 +604,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   `vercel-labs/skills` repository, and all 30 cited external endpoints return an acceptable live response. Added
   deterministic `npm run lint:docs` validation and required it in both CI and stable publication workflows;
   README documents the command. External reachability remains a manual release probe to avoid flaky CI networking.
+  Commit `7524512` passed CI run 29238406643, including the new link gate and the complete 124-test, dual-E2E,
+  type/build/API/audit, systemd, attested amd64/arm64 source-build, and non-root smoke matrix.
 - 2026-07-13 (Stable workflow fail-closed publication): audit found the tag workflow could succeed and create
   a GitHub stable release while silently skipping npm publication when `NPM_TOKEN` was absent. Publication is now
   mandatory: the workflow fails before build without the secret, runs both browser and two-headless-client E2E,
