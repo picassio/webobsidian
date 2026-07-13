@@ -609,7 +609,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   for clean merge and durable conflict behavior for overlap. Core 14/14, headless 11/11, full typecheck/build/audit
   pass; packed core 0.1.2 plus headless artifacts also clean-install together without workspace links. Commit
   `e783316` passed CI run 29234148411 (attempt 2): all 124 tests, type/build/OpenAPI/audit, production browser
-  E2E, systemd verification, both attested amd64/arm64 source builds, and non-root image smoke.
+  E2E, systemd verification, both attested amd64/arm64 source builds, and non-root image smoke. The exact
+  production server/dist-CLI scenario is now `e2e/headless-pair.mjs` and a required CI step, not manual evidence only.
 - 2026-07-13 (systemd lifecycle claim correction): audit found shipped `ExecReload=SIGHUP` although the CLI only
   handles SIGTERM/SIGINT; SIGHUP would terminate/restart rather than reload configuration. Removed the unsupported
   directive and documented `systemctl restart` after changes. Added a regression test binding unit claims to the

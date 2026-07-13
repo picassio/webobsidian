@@ -43,6 +43,9 @@ jobs:
       - name: Two-browser Central Sync E2E
         run: npm run test:e2e:browser
 
+      - name: Two-headless-client Central Sync E2E
+        run: npm run test:e2e:headless
+
       - name: Verify headless systemd unit
         run: systemd-analyze verify clients/headless/packaging/systemd/web-vault-sync.service
 
