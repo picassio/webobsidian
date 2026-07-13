@@ -45,6 +45,7 @@ Use `--profile NAME` for multiple vaults or `--config-dir PATH` for explicit sta
 | `conflicts list/show/resolve` | Inspect and resolve with server/client/copy/merged choices. |
 | `doctor --json` | Verify permissions, checksum, paths/hashes, protocol, server, and token. |
 | `reset --yes` | Reset local metadata while retaining every vault file. |
+| `version` / `--version` | Print the installed package version without requiring initialized state. |
 
 Exit codes: `0` success, `2` usage, `3` authentication, `4` unresolved conflict, `5` network/protocol transport, `6` local state/doctor failure, `7` daemon lock.
 

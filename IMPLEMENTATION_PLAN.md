@@ -594,10 +594,20 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       local amd64/arm64 Docker builds, upgrade preserves vault and Git history; recovery drills recorded.
 - [ ] M40.5 Publish headless npm package + local amd64/arm64 Docker build examples; verify clean Linux server
       install, systemd boot, sidecar health and unattended upgrade. Registry image publication is intentionally out.
+      Local packed-artifact upgrade from core 0.1.1/pre-marker state to core 0.1.2 preserves token/device/cursor/vault,
+      migrates state additively, accepts the next revision, and passes doctor; npm-origin publication/install remains.
 - [ ] M40.6 Community plugin approval/installability + support docs: pairing, mobile limitations, conflicts,
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Installed headless upgrade + CLI failure-path repair): a real isolated global-prefix drill installed
+  packed commit `4d45e88` (`sync-core` 0.1.1 + pre-marker `web-vault-sync`), paired/synced revision 1, replaced it
+  with current packed core 0.1.2/headless bytes, then proved unchanged credential/device/cursor/vault, additive
+  `mergedSources` state migration, accepted revision 2, empty queue, exact server bytes, and clean doctor. The first
+  attempt exposed a release-blocking CLI TDZ: any early usage/startup error could make `exitCode()` reference
+  `UsageError` before initialization and emit `ReferenceError`. Error classes now initialize before execution;
+  `version`/`--version` reads the installed package metadata without state, and process-level regressions prove usage
+  exit 2 plus uninitialized-state exit 6 with sanitized JSON. Headless 13/13 and full typecheck pass.
 - 2026-07-13 (Final sync-source hygiene/type audit): no TODO/FIXME/HACK/TBD placeholders exist in core/server/
   browser/headless sync paths (the only “todo” matches are legitimate callout names), and no workflow/docs path
   can publish registry images. Replaced the Central Sync admin API/UI's remaining `any` contracts with explicit

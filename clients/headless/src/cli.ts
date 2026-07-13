@@ -9,6 +9,9 @@ import { HeadlessStore, type SyncMode } from './state.js';
 import { NodeSyncTransport, TransportError, validateServerUrl } from './transport.js';
 
 const EXIT = { usage: 2, auth: 3, conflict: 4, network: 5, local: 6, lock: 7 } as const;
+class UsageError extends Error {}
+class AuthError extends Error {}
+
 const args = process.argv.slice(2);
 const global = extractGlobals(args);
 const command = args.shift() ?? 'help';
@@ -28,7 +31,8 @@ try {
 }
 
 async function execute(): Promise<void> {
-  if (command === 'help' || command === '--help' || command === '-h') { printHelp(); return; }
+  if (command === 'help' || command === '--help' || command === '-h') { await printHelp(); return; }
+  if (command === 'version' || command === '--version' || command === '-v') { process.stdout.write(`${await packageVersion()}\n`); return; }
   if (command === 'completion') { printCompletion(args[0] ?? 'bash'); return; }
   if (command === 'init') return initialize();
   await store.load();
@@ -137,8 +141,12 @@ function print(value: unknown) { process.stdout.write(`${global.json ? JSON.stri
 function option(name: string): string | undefined { const index = args.indexOf(name); if (index < 0) return undefined; const value = args[index + 1]; if (!value) throw new UsageError(`${name} requires a value`); args.splice(index, 2); return value; }
 function has(name: string): boolean { const index = args.indexOf(name); if (index < 0) return false; args.splice(index, 1); return true; }
 function extractGlobals(values: string[]) { let profile = 'default'; let configDir: string | undefined; let json = false; for (let i = 0; i < values.length;) { if (values[i] === '--profile') { profile = values[i + 1] ?? ''; values.splice(i, 2); } else if (values[i] === '--config-dir') { configDir = values[i + 1]; values.splice(i, 2); } else if (values[i] === '--json') { json = true; values.splice(i, 1); } else i += 1; } return { profile, configDir, json }; }
-function printHelp() { process.stdout.write(`web-vault-sync 0.1.0\n\nCommands:\n  init --server URL --vault PATH [--mode MODE]\n  pair --code CODE\n  sync | pull | push\n  watch [--polling]\n  status [--json]\n  conflicts list|show ID|resolve ID server|client|copy|merged [--merged-file PATH]\n  doctor [--json]\n  reset --yes\n  completion bash\n\nGlobal: --profile NAME --config-dir PATH --json\nExit codes: 0 success, 2 usage, 3 auth, 4 unresolved conflict, 5 network, 6 local state, 7 daemon lock.\n`); }
-function printCompletion(shell: string) { if (shell !== 'bash') throw new UsageError('only bash completion is currently supported'); process.stdout.write(`_web_vault_sync(){ local cur="\${COMP_WORDS[COMP_CWORD]}"; COMPREPLY=( $(compgen -W "init pair sync pull push watch status conflicts doctor reset completion" -- "$cur") ); }; complete -F _web_vault_sync web-vault-sync\n`); }
+async function printHelp() { process.stdout.write(`web-vault-sync ${await packageVersion()}\n\nCommands:\n  init --server URL --vault PATH [--mode MODE]\n  pair --code CODE\n  sync | pull | push\n  watch [--polling]\n  status [--json]\n  conflicts list|show ID|resolve ID server|client|copy|merged [--merged-file PATH]\n  doctor [--json]\n  reset --yes\n  completion bash\n  version | --version\n\nGlobal: --profile NAME --config-dir PATH --json\nExit codes: 0 success, 2 usage, 3 auth, 4 unresolved conflict, 5 network, 6 local state, 7 daemon lock.\n`); }
+function printCompletion(shell: string) { if (shell !== 'bash') throw new UsageError('only bash completion is currently supported'); process.stdout.write(`_web_vault_sync(){ local cur="\${COMP_WORDS[COMP_CWORD]}"; COMPREPLY=( $(compgen -W "init pair sync pull push watch status conflicts doctor reset completion version" -- "$cur") ); }; complete -F _web_vault_sync web-vault-sync\n`); }
+async function packageVersion(): Promise<string> {
+  const metadata = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version?: unknown };
+  if (typeof metadata.version !== 'string' || metadata.version.length === 0) throw new Error('package version is unavailable');
+  return metadata.version;
+}
 function sanitize(error: unknown) { return (error instanceof Error ? error.message : String(error)).replace(/Bearer\s+\S+/gi, 'Bearer <redacted>').replace(process.env.WEB_VAULT_SYNC_TOKEN ?? '__never__', '<redacted>'); }
 function exitCode(error: unknown) { if (error instanceof UsageError) return EXIT.usage; if (error instanceof AuthError || (error instanceof TransportError && [401, 403].includes(error.status))) return EXIT.auth; if (error instanceof TransportError) return EXIT.network; if (sanitize(error).includes('another daemon')) return EXIT.lock; return EXIT.local; }
-class UsageError extends Error {} class AuthError extends Error {}
