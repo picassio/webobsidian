@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**/*.png'
+      - 'docs/**/*.jpg'
+      - 'docs/**/*.jpeg'
+      - 'docs/**/*.webp'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**/*.png'
+      - 'docs/**/*.jpg'
+      - 'docs/**/*.jpeg'
+      - 'docs/**/*.webp'
 
 jobs:
   build:
@@ -54,6 +66,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verify Compose healthcheck targets IPv4 loopback
+        run: |
+          test "$(docker compose config --format json | jq -r '.services.webobsidian.healthcheck.test[-1]')" = \
+            "http://127.0.0.1:8787/healthz"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

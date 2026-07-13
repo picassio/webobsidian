@@ -612,6 +612,11 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Compose IPv4 health regression): a production-like source deployment exposed that Compose overrode
+  the already-correct Dockerfile healthcheck with `localhost`; Alpine resolved it to IPv6 while Node listened on IPv4,
+  producing false `unhealthy` state despite a healthy API. Changed Compose to `127.0.0.1`, added a CI contract
+  assertion, and confirmed the recreated container immediately healthy. Environment-specific deployment inventory,
+  addresses, paths, and credential references are intentionally kept out of this public repository.
 - 2026-07-13 (Personal npm scope publication + registry-origin M40.5): user explicitly rejected creating an npm
   organization and selected personal scope `@picassio`. PRD bumped to 1.8; every server/browser/headless import,
   package manifest/lock, Docker build, workflow and current doc moved from `@webobsidian/sync-core` to

@@ -20,6 +20,10 @@ WebObsidian là web app self-hosted clone toàn diện Obsidian. Thiết kế ch
 4. **Tài liệu là nguồn sự thật.** Khi phạm vi thay đổi theo yêu cầu người dùng: cập nhật PRD.md
    (thiết kế) và IMPLEMENTATION_PLAN.md (thêm/sửa mục) trong cùng lần thay đổi.
 
+5. **Không commit thông tin hạ tầng nội bộ.** Tài liệu public không được chứa hostname/IP/VMID nội bộ,
+   đường dẫn triển khai riêng, tên credential item/vault, hay inventory vận hành theo môi trường. Lưu bằng chứng
+   vận hành riêng trong PARA wiki hoặc hệ quản trị bí mật; tài liệu git chỉ giữ kết luận kỹ thuật đã khử định danh.
+
 ## Quy ước kỹ thuật
 - Ngôn ngữ: TypeScript cho cả server và web. Tránh `any` khi có thể.
 - Cấu hình runtime: chỉ dùng file JSON (`data/settings.json`) — không thêm DB engine.
