@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.8 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.9 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -521,7 +521,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       không vào `data.json` hay vault.
 - [x] M36.4 Local engine: durable cursor + apply intents + pending offline queue, per-path modify debounce,
       globally serialized mutation preparation (uploads cannot overtake client sequence), automatic offline cold-start
-      and foreground-event retry, create/rename/delete/subtree resume, binary chunk batches, idempotent push,
+      and foreground-event retry, create/rename/delete/subtree resume (rename→modify giữ identity/order và rehash
+      destination; rename→delete collapse về original-identity delete), binary chunk batches, idempotent push,
       ordered pull/ack; indexed projection lookup + unchanged-path reconciliation không persist marker/sequence và
       yield mỗi 100 paths; không advance cursor khi local apply còn uncertain.
 - [x] M36.5 Remote apply echo suppression theo expected `(path,hash,revision)`; không dùng timing flag;
@@ -534,7 +535,7 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.8 bytes complete the Linux matrix:
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.9 bytes complete the Linux matrix:
       concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
       exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
@@ -610,6 +611,17 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Rename-event burst ordering + exact plugin 0.1.9): queue audit found a destination upsert could
+  replace a durable rename marker, while a pre-rename modify marker pointed at the now-missing old path. The result
+  could create a second identity at the destination and leave stale server content. Pending markers now coalesce
+  rename→upsert without losing `oldPath`, commit rename first, then durably rehash destination against either the
+  new projection or prior identity/base. Rename→delete before flush collapses to deletion of the original identity.
+  Regressions prove rename/modify operations use sequences 1/2 on one entry ID and immediate rename/delete emits
+  only original-identity delete. Exact 0.1.9 bytes in real Obsidian 1.12.7 renamed `Burst.md`→`Final.md` and modified
+  it before debounce: journal sequences 12/13 were rename then modify, both retained entry
+  `entry_8KBpvgDn-wjEAn_NF8ILtfF2`, revisions 9→10→11, local/server final bytes matched, old path was absent,
+  and cursor 13 had zero conflicts/queue/pending/apply intents. Public source/tag `244b062`/0.1.9; release CI
+  29248410774 and Node 20/22/24 CI 29248409324 passed; `main.js` SHA-256 `c2e653b6…4eed`. External gates remain.
 - 2026-07-13 (Authoritative conflict badge + exact plugin 0.1.8): restart after the open-editor drills exposed
   that two unresolved server conflicts remained durable/listable but the plugin status/diagnostics reset their
   in-memory count to zero, violating M36.6 visibility. Successful sync now refreshes the count from the authenticated

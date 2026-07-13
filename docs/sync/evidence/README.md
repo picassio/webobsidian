@@ -1,5 +1,24 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.9-release.png`
+
+The event-burst candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
+`central-vault-sync` 0.1.9: SHA-256 `c2e653b6…4eed` (`main.js`), `ca27ef9c…d373` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows version 0.1.9 enabled and synchronized.
+
+Queue review found that a rename marker and a rapid modify shared the destination path; replacing the former with
+the latter could create the destination as a new identity while leaving the old server path. A modify marker for
+the old path could also disappear after the local rename. Version 0.1.9 durably coalesces destination events,
+commits an identity-preserving rename first, and always rehashes the destination using either the new projection or
+the prior identity/base. Rename immediately followed by delete collapses safely to deletion of the original
+identity rather than a stale rename/delete conflict. Unit regressions cover both burst forms.
+
+In the exact-byte Obsidian drill, `Burst.md` was synchronously renamed to `Final.md` and modified before the debounce
+elapsed. The authoritative journal appended sequence 12 `rename` then sequence 13 `modify`; both retained entry ID
+`entry_8KBpvgDn-wjEAn_NF8ILtfF2`, revisions advanced 9→10→11, `Burst.md` disappeared, and local/server
+`Final.md` matched `final burst content`. Cursor reached 13, next client sequence 10, with zero conflicts,
+queue, pending paths, or apply intents. Prior evidence below remains applicable.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.8-release.png`
 
 The authoritative-conflict-status candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
