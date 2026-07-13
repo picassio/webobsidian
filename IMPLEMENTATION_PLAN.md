@@ -607,7 +607,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   attempt exposed a release-blocking CLI TDZ: any early usage/startup error could make `exitCode()` reference
   `UsageError` before initialization and emit `ReferenceError`. Error classes now initialize before execution;
   `version`/`--version` reads the installed package metadata without state, and process-level regressions prove usage
-  exit 2 plus uninitialized-state exit 6 with sanitized JSON. Headless 13/13 and full typecheck pass.
+  exit 2 plus uninitialized-state exit 6 with sanitized JSON. Headless 13/13 and full typecheck pass. Commit
+  `81e9ba5` passed CI run 29240400322: all 126 tests, docs/API/audit, both production E2Es, systemd verification,
+  attested amd64/arm64 source builds, and non-root smoke.
 - 2026-07-13 (Final sync-source hygiene/type audit): no TODO/FIXME/HACK/TBD placeholders exist in core/server/
   browser/headless sync paths (the only “todo” matches are legitimate callout names), and no workflow/docs path
   can publish registry images. Replaced the Central Sync admin API/UI's remaining `any` contracts with explicit
