@@ -602,8 +602,10 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   stable release publishes source/npm/GitHub artifacts only. A beta push had completed immediately before the
   instruction arrived (`web-vault-sync` digest `sha256:4573d9...`, `webobsidian` `sha256:bfe0c6...`); both GHCR
   packages are private. REST deletion and OCI manifest deletion were attempted but rejected because the current
-  token lacks `delete:packages` (403/405). Owner must delete both private packages in GitHub package settings or
-  authorize `read:packages,delete:packages`; they are not documented or offered to users.
+  token lacks `delete:packages` (403/405). The owner explicitly chose to leave both private packages in place for
+  now; they are inaccessible anonymously, undocumented, and not offered to users. Commit `24eca8a` removed future
+  registry jobs/references. CI run 29229982547 passed all tests/E2E plus attested SBOM/provenance amd64+arm64 local
+  builds for both server and headless Dockerfiles and the non-root smoke, proving clone/build distribution.
 - 2026-07-13 (Main publication + CI): user explicitly authorized committing/pushing the complete working tree.
   Commit `e3c7435` is public on `picassio/webobsidian`; CI run 29228551700 passed both jobs: fresh npm install,
   typecheck, all 122 tests, OpenAPI, zero-vulnerability audit, build, real two-browser production E2E, systemd
