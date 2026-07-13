@@ -1,5 +1,46 @@
 // Thin fetch wrapper around the WebObsidian server API.
-import { sha256Text } from '@webobsidian/sync-core';
+import {
+  sha256Text,
+  type Conflict,
+  type Device,
+  type OperationResult,
+} from '@webobsidian/sync-core';
+
+export interface SyncHealthResponse {
+  protocolVersion: string;
+  initialized: boolean;
+  readOnly: boolean;
+  reason: string | null;
+  latestSequence: number;
+  indexLagSequence: number;
+  alerts: Array<{ severity: 'critical' | 'warning'; code: string; message: string }>;
+  metrics: Record<string, unknown>;
+}
+
+export interface SyncDoctorIssue {
+  severity: 'error' | 'warning';
+  code: string;
+  message: string;
+  path?: string;
+  repairable: boolean;
+  repaired: boolean;
+}
+
+export interface SyncDoctorResponse {
+  protocolVersion: string;
+  healthy: boolean;
+  readOnlyRecommended: boolean;
+  latestSequence: number | null;
+  checkedEntries: number;
+  checkedBlobs: number;
+  issues: SyncDoctorIssue[];
+}
+
+export interface SyncConflictResolutionResponse {
+  protocolVersion: string;
+  conflict: Conflict;
+  result?: OperationResult;
+}
 
 export interface TreeNode {
   name: string;
@@ -225,11 +266,11 @@ export const api = {
     req<{ protocolVersion: string; vaultId: string; deviceId: string; token: string }>('/api/sync/v1/pair', {
       method: 'POST', body: JSON.stringify({ protocolVersion: '1.0', code, deviceId, deviceName }),
     }),
-  syncHealth: () => req<any>('/api/sync/v1/health'),
-  syncDoctor: () => req<any>('/api/sync/v1/doctor'),
-  syncDevices: () => req<{ protocolVersion: string; devices: any[] }>('/api/sync/v1/devices'),
+  syncHealth: () => req<SyncHealthResponse>('/api/sync/v1/health'),
+  syncDoctor: () => req<SyncDoctorResponse>('/api/sync/v1/doctor'),
+  syncDevices: () => req<{ protocolVersion: string; devices: Device[] }>('/api/sync/v1/devices'),
   revokeSyncDevice: (deviceId: string) => req<{ ok: true }>(`/api/sync/v1/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
-  syncConflicts: () => syncDeviceReq<{ protocolVersion: string; conflicts: any[] }>('/conflicts'),
+  syncConflicts: () => syncDeviceReq<{ protocolVersion: string; conflicts: Conflict[] }>('/conflicts'),
   syncRevisionText: async (entryId: string, revision: number) =>
     (await syncDeviceFetch(`/files/${encodeURIComponent(entryId)}?revision=${revision}`)).text(),
   downloadSyncBlob: async (hash: string, filename: string) => {
@@ -240,7 +281,7 @@ export const api = {
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   },
   resolveSyncConflict: (conflictId: string, resolution: 'keep-server' | 'keep-client' | 'merged' | 'copy', clientSequence: number, mergedContent?: string) =>
-    syncDeviceReq<any>(`/conflicts/${encodeURIComponent(conflictId)}/resolve`, {
+    syncDeviceReq<SyncConflictResolutionResponse>(`/conflicts/${encodeURIComponent(conflictId)}/resolve`, {
       method: 'POST',
       body: JSON.stringify({
         protocolVersion: '1.0', clientSequence, resolution,

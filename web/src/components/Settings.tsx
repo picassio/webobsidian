@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Conflict, Device } from '@webobsidian/sync-core';
 import { useStore } from '../lib/store';
-import { api } from '../lib/api';
+import { api, type SyncDoctorResponse, type SyncHealthResponse } from '../lib/api';
 import Icon from './Icon';
-import { IndexedDbSyncPersistence } from '../lib/sync-db';
+import { IndexedDbSyncPersistence, type BrowserDeviceState } from '../lib/sync-db';
 
 type Section = 'vault' | 'sync' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
@@ -71,12 +72,12 @@ function Row({ name, desc, children }: { name: string; desc?: string; children: 
 }
 
 function SyncSettings() {
-  const [health, setHealth] = useState<any>(null);
-  const [doctor, setDoctor] = useState<any>(null);
-  const [devices, setDevices] = useState<any[]>([]);
-  const [localDevice, setLocalDevice] = useState<any>(null);
-  const [conflicts, setConflicts] = useState<any[]>([]);
-  const [selected, setSelected] = useState<{ conflict: any; base: string | null; server: string; client: string; binary: boolean } | null>(null);
+  const [health, setHealth] = useState<SyncHealthResponse | null>(null);
+  const [doctor, setDoctor] = useState<SyncDoctorResponse | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [localDevice, setLocalDevice] = useState<BrowserDeviceState | null>(null);
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
+  const [selected, setSelected] = useState<{ conflict: Conflict; base: string | null; server: string; client: string; binary: boolean } | null>(null);
   const [merged, setMerged] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -113,7 +114,7 @@ function SyncSettings() {
       setError(e instanceof Error ? e.message : 'Pairing failed');
     } finally { setBusy(false); }
   };
-  const inspectConflict = async (conflict: any) => {
+  const inspectConflict = async (conflict: Conflict) => {
     setBusy(true); setError('');
     try {
       const binary = !/\.(md|markdown|txt|json|css|js|ts|tsx|jsx|html|xml|yaml|yml|csv|svg)$/i.test(conflict.path);
@@ -164,7 +165,7 @@ function SyncSettings() {
     const payload = JSON.stringify({
       exportedAt: new Date().toISOString(), protocolVersion: health?.protocolVersion ?? '1.0',
       health,
-      doctor: doctor ? { ...doctor, issues: doctor.issues?.map(({ severity, code, message, repairable, repaired }: any) => ({ severity, code, message: String(message).replace(/(?:[A-Za-z]:)?[\\/][^\s]*/g, '<redacted-path>'), repairable, repaired })) } : null,
+      doctor: doctor ? { ...doctor, issues: doctor.issues.map(({ severity, code, message, repairable, repaired }) => ({ severity, code, message: message.replace(/(?:[A-Za-z]:)?[\\/][^\s]*/g, '<redacted-path>'), repairable, repaired })) } : null,
       devices: devices.map(({ deviceId, name, createdAt, lastSeenAt, acknowledgedSequence, revokedAt }) => ({ deviceId, name, createdAt, lastSeenAt, acknowledgedSequence, revokedAt })),
       local: localDevice ? { deviceId: localDevice.deviceId, deviceName: localDevice.deviceName, cursor: localDevice.cursor } : null,
     }, null, 2);
@@ -173,6 +174,8 @@ function SyncSettings() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   };
   const state = health?.readOnly ? 'Read-only recovery mode' : health ? 'Server healthy' : 'Checking…';
+  const selectedCurrentHash = selected?.conflict.currentHash;
+  const selectedSubmittedHash = selected?.conflict.submittedHash;
   return (
     <div>
       <h2>Central Sync</h2>
@@ -186,7 +189,7 @@ function SyncSettings() {
           <button className="btn secondary" type="button" disabled={!health} onClick={exportDiagnostics}>Export redacted JSON</button>
         </div>
       </Row>
-      {health?.alerts?.map((alert: any) => <p key={alert.code + alert.message} role="alert" style={{ color: alert.severity === 'critical' ? 'var(--text-error)' : 'var(--text-warning)' }}>{alert.message}</p>)}
+      {health?.alerts.map((alert) => <p key={alert.code + alert.message} role="alert" style={{ color: alert.severity === 'critical' ? 'var(--text-error)' : 'var(--text-warning)' }}>{alert.message}</p>)}
       {doctor && <p role="status" className="desc">Doctor: {doctor.healthy ? 'healthy' : `${doctor.issues.length} issue(s)`}; checked {doctor.checkedEntries} entries and {doctor.checkedBlobs} blobs.</p>}
       <p className="desc">Sync scope: normal vault files, attachments, and empty folders. Device workspace remains local. Excluded: <code>.obsidian/**</code>, <code>.git/**</code>, <code>.trash/**</code>, temporary/OS files, and server sync metadata.</p>
       <Row name="This browser" desc={localDevice ? `Paired as ${localDevice.deviceName}` : 'Pair to enable durable offline queue and ordered catch-up'}>
@@ -211,8 +214,8 @@ function SyncSettings() {
               <p><strong>Server SHA-256:</strong> <code>{selected.conflict.currentHash ?? 'deleted'}</code></p>
               <p><strong>Client SHA-256:</strong> <code>{selected.conflict.submittedHash ?? 'unavailable'}</code></p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {selected.conflict.currentHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selected.conflict.currentHash, `server-${selected.conflict.path.split('/').at(-1)}`)}>Download server</button>}
-                {selected.conflict.submittedHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selected.conflict.submittedHash, `client-${selected.conflict.path.split('/').at(-1)}`)}>Download client</button>}
+                {selectedCurrentHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selectedCurrentHash, `server-${selected.conflict.path.split('/').at(-1) ?? 'conflict.bin'}`)}>Download server</button>}
+                {selectedSubmittedHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selectedSubmittedHash, `client-${selected.conflict.path.split('/').at(-1) ?? 'conflict.bin'}`)}>Download client</button>}
               </div>
             </div>
           ) : (

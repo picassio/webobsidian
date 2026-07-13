@@ -598,6 +598,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Final sync-source hygiene/type audit): no TODO/FIXME/HACK/TBD placeholders exist in core/server/
+  browser/headless sync paths (the only “todo” matches are legitimate callout names), and no workflow/docs path
+  can publish registry images. Replaced the Central Sync admin API/UI's remaining `any` contracts with explicit
+  health, doctor, Device, Conflict, browser-device, and conflict-resolution types. Type narrowing also exposed a
+  possible undefined binary download basename; it now has a deterministic `conflict.bin` fallback. Full typecheck,
+  browser 11/11 tests, and production build pass; unrelated legacy app/plugin-loader `any` usage was not broadened.
 - 2026-07-13 (Markdown/link integrity gate): scanned all 25 repository Markdown files outside generated/vendor
   trees. Every relative target and GitHub-style heading anchor resolves. Live HTTP probes found one stale external
   reference (`obsidianmd/obsidian-skills`, 404); the documented `npx skills` installer now points to its actual
