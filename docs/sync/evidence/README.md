@@ -1,5 +1,19 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.5-release.png`
+
+The final runtime-outage candidate loaded in the same real Obsidian Linux 1.12.7 matrix is byte-identical to public
+`central-vault-sync` 0.1.5: SHA-256 `08f7e3c3…df6e` (`main.js`), `f094631b…80c2` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows version 0.1.5 enabled and **Central Sync: synced**.
+
+With the app already foregrounded and synchronized at cursor 12, the server was stopped and a binary attachment
+was created through Obsidian's Vault API. Without manual **Sync now** or an app restart, the plugin reported
+**offline**, retained one pending marker, preserved the next client sequence, and stored only the redacted
+connection error. After the server returned, the scheduled retry uploaded the exact five bytes and converged at
+cursor 13/next client sequence 28 with `lastError` cleared and zero conflicts, queued operations, pending paths, or
+apply intents. Local/server SHA-256 both equal `0835f545…3d8`. This specifically closes the runtime-event retry gap
+found during the Community-guideline preflight; the broader 0.1.4 lifecycle matrix below remains applicable.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.4-release.png`
 
 The final binary loaded in an isolated real Obsidian Linux 1.12.7 vault is byte-identical to the public
