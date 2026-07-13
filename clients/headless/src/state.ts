@@ -8,7 +8,7 @@ import {
   type SyncClientPersistence,
   type SyncEntry,
   type SyncOperation,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 
 export type SyncMode = 'bidirectional' | 'pull-only' | 'push-only';
 export interface PendingPath { path: string; action: 'upsert' | 'rename' | 'delete'; oldPath?: string; observedAt: string }

@@ -11,10 +11,10 @@ import {
   type SyncEntry,
   type SyncEvent,
   type SyncLocalAdapter,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 
 export { OrderedSyncClient as BrowserSyncEngine };
-export type { SyncConnectionStatus } from '@webobsidian/sync-core';
+export type { SyncConnectionStatus } from '@picassio/sync-core';
 export type LocalSyncAdapter = SyncLocalAdapter;
 export type SyncTransport = SyncClientTransport;
 

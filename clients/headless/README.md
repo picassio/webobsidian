@@ -1,9 +1,9 @@
 # web-vault-sync
 
-Linux CLI and long-running filesystem daemon for WebObsidian Central Sync Protocol 1.0. The package uses the same `@webobsidian/sync-core` ordered client as the browser and native plugin.
+Linux CLI and long-running filesystem daemon for WebObsidian Central Sync Protocol 1.0. The package uses the same `@picassio/sync-core` ordered client as the browser and native plugin.
 
-> `0.1.x` is pre-release. npm publication occurs after the complete cross-client recovery matrix; container
-> deployment is built locally from the verified source tag rather than downloaded from a registry.
+> `0.1.x` is pre-release. `web-vault-sync@0.1.0` and its exact `@picassio/sync-core@0.1.2` dependency are
+> public on npm. Container deployment is built locally from the verified source tag rather than downloaded from a registry.
 
 ## Safety
 

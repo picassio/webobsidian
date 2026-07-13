@@ -14,7 +14,7 @@ import {
   type SyncEntry,
   type SyncEvent,
   type SyncOperation,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 import { MergeBaseStore } from './base-store.js';
 import { BlobStore } from './blob-store.js';
 import { ConflictStore } from './conflict-store.js';

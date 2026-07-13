@@ -30,8 +30,8 @@ Current consumers:
 Regenerate and verify:
 
 ```bash
-npm --workspace @webobsidian/sync-core run generate:schema
-npm --workspace @webobsidian/sync-core test
+npm --workspace @picassio/sync-core run generate:schema
+npm --workspace @picassio/sync-core test
 npx @redocly/cli lint docs/sync/openapi-v1.yaml
 ```
 

@@ -37,7 +37,7 @@ jobs:
       - name: Assemble npm and server artifacts
         run: |
           mkdir -p release
-          npm pack --workspace @webobsidian/sync-core --pack-destination release
+          npm pack --workspace @picassio/sync-core --pack-destination release
           npm pack --workspace web-vault-sync --pack-destination release
           tar -czf "release/webobsidian-server-${GITHUB_REF_NAME}.tar.gz" \
             package.json package-lock.json README.md LICENSE SECURITY.md \
@@ -52,7 +52,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          npm publish --workspace @webobsidian/sync-core --access public --provenance
+          npm publish --workspace @picassio/sync-core --access public --provenance
           npm publish --workspace web-vault-sync --access public --provenance
       - name: Create immutable GitHub release
         env:

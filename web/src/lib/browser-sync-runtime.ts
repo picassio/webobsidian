@@ -1,4 +1,4 @@
-import { DEFAULT_LIMITS, normalizeVaultPath, sha256Chunks, sha256Text, type SyncOperation } from '@webobsidian/sync-core';
+import { DEFAULT_LIMITS, normalizeVaultPath, sha256Chunks, sha256Text, type SyncOperation } from '@picassio/sync-core';
 import { api } from './api';
 import { BrowserLocalSyncAdapter } from './browser-sync-adapter';
 import { IndexedDbSyncPersistence, type PendingAttachment } from './sync-db';

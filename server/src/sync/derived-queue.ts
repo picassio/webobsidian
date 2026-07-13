@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { SyncEventSchema, type SyncEvent } from '@webobsidian/sync-core';
+import { SyncEventSchema, type SyncEvent } from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 
 const DERIVED_QUEUE_SCHEMA_VERSION = 1;

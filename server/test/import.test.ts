@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 import { SyncCoordinator } from '../src/sync/coordinator.js';
 
 const actor = { type: 'git-import' as const, id: 'git_import_test_1' };

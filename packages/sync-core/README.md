@@ -1,11 +1,11 @@
-# @webobsidian/sync-core
+# @picassio/sync-core
 
 Shared, platform-neutral Sync Protocol 1.0 contracts and deterministic client state machine for WebObsidian
 Central Sync. It includes strict Zod schemas/types, path policy, SHA-256 helpers, replay/conflict primitives,
 golden fixtures, and ordered manifest/catch-up/apply-intent/offline-queue orchestration.
 
 ```ts
-import { OrderedSyncClient, HandshakeResponseSchema, PROTOCOL_VERSION } from '@webobsidian/sync-core';
+import { OrderedSyncClient, HandshakeResponseSchema, PROTOCOL_VERSION } from '@picassio/sync-core';
 ```
 
 Adapters provide persistence, transport, and local materialization; this package performs no filesystem,

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { sha256Text, type SyncOperation } from '@webobsidian/sync-core';
+import { sha256Text, type SyncOperation } from '@picassio/sync-core';
 import { MergeBaseStore } from '../src/sync/base-store.js';
 import { BlobStore } from '../src/sync/blob-store.js';
 import { ConflictStore } from '../src/sync/conflict-store.js';

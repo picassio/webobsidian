@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.7 · Cập nhật: 2026-07-13 · Trạng thái: Draft
+> Phiên bản: 1.8 · Cập nhật: 2026-07-13 · Trạng thái: Draft
+> Changelog 1.8 (npm owner scope): theo quyết định trực tiếp của người dùng, shared package được publish dưới
+> scope cá nhân `@picassio/sync-core` thay vì yêu cầu tạo npm organization `@webobsidian`. Server, browser,
+> plugin và headless dùng cùng package name mới; `web-vault-sync` vẫn là package public unscoped. Thay đổi này
+> chỉ đổi package distribution identity, không đổi Sync Protocol 1.0, runtime authority hay compatibility.
 > Changelog 1.7 (container distribution): theo quyết định vận hành của người dùng, WebObsidian và headless
 > client **không publish container lên GHCR/registry**. Dockerfiles vẫn là release artifacts được CI build/smoke
 > cho amd64/arm64 với SBOM/provenance validation; operator clone source/tag đã kiểm chứng và tự build image.

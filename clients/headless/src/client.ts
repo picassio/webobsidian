@@ -1,4 +1,4 @@
-import { OrderedSyncClient, type OperationResult, type SyncConnectionStatus } from '@webobsidian/sync-core';
+import { OrderedSyncClient, type OperationResult, type SyncConnectionStatus } from '@picassio/sync-core';
 import { FilesystemAdapter } from './fs-adapter.js';
 import { FilesystemMutationQueue } from './local-queue.js';
 import { HeadlessStore } from './state.js';

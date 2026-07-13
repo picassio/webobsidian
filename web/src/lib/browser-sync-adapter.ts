@@ -1,4 +1,4 @@
-import { mergeText, sha256Text, type OperationResult, type SyncEntry, type SyncEvent } from '@webobsidian/sync-core';
+import { mergeText, sha256Text, type OperationResult, type SyncEntry, type SyncEvent } from '@picassio/sync-core';
 import { useStore, type DocumentState } from './store';
 import type { LocalApplyIntent, SyncPersistence } from './sync-db';
 import type { LocalSyncAdapter } from './sync-engine';

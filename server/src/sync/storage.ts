@@ -3,7 +3,7 @@ import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z, type ZodType } from 'zod';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 
 const ENVELOPE_VERSION = 1;
 

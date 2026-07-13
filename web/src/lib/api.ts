@@ -4,7 +4,7 @@ import {
   type Conflict,
   type Device,
   type OperationResult,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 
 export interface SyncHealthResponse {
   protocolVersion: string;

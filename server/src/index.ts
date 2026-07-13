@@ -37,7 +37,7 @@ import { scheduleAutoCommitOnSave } from './services/git.js';
 import { onFileRenamed } from './services/shares.js';
 import { getSyncCoordinator, getSyncDeviceStore, initializeSyncRuntime, shutdownSyncRuntime } from './services/sync-runtime.js';
 import { registerSyncWebSocketDisconnect } from './sync/ws-registry.js';
-import { sha256Chunks, type SyncEvent } from '@webobsidian/sync-core';
+import { sha256Chunks, type SyncEvent } from '@picassio/sync-core';
 import { VaultStateStore } from './sync/vault-state.js';
 import { wsTickets } from './sync/ws-tickets.js';
 

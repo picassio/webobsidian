@@ -14,7 +14,7 @@ import {
   type SyncEvent,
   type SyncLocalAdapter,
   type SyncOperation,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 import { HeadlessStore } from './state.js';
 import { NodeSyncTransport } from './transport.js';
 

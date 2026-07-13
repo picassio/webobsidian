@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { sha256Text, type OperationResult } from '@webobsidian/sync-core';
+import { sha256Text, type OperationResult } from '@picassio/sync-core';
 import { IdempotencyConflictError, IdempotencyStore } from '../src/sync/idempotency-store.js';
 
 async function directory(t: TestContext): Promise<string> {

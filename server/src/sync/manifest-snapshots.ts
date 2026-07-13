@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { SyncEntry } from '@webobsidian/sync-core';
+import type { SyncEntry } from '@picassio/sync-core';
 
 interface Snapshot { snapshotId: string; sequence: number; entries: SyncEntry[]; expiresAt: number }
 interface Cursor { snapshotId: string; offset: number }

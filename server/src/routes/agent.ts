@@ -6,7 +6,7 @@ import { qmd } from '../services/search.js';
 import { backlinksFor } from '../services/links.js';
 import { parseNote } from '../services/markdown.js';
 import { getSyncBlobStore, getSyncCoordinator } from '../services/sync-runtime.js';
-import { sha256Text, type SyncEvent } from '@webobsidian/sync-core';
+import { sha256Text, type SyncEvent } from '@picassio/sync-core';
 
 /**
  * Agent API (PRD FR-6) — REST surface for AI agents, authenticated by API key.

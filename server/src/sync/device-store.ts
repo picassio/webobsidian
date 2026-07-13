@@ -2,7 +2,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { DeviceSchema, IdSchema, sha256Text } from '@webobsidian/sync-core';
+import { DeviceSchema, IdSchema, sha256Text } from '@picassio/sync-core';
 import { AsyncMutex } from './locks.js';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 

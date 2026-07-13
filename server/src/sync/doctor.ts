@@ -1,6 +1,6 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { sha256Chunks } from '@webobsidian/sync-core';
+import { sha256Chunks } from '@picassio/sync-core';
 import { MergeBaseStore } from './base-store.js';
 import { BlobStore } from './blob-store.js';
 import { TransactionIntentStore } from './intents.js';

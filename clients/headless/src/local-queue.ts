@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { assertServerPathAllowed, type OrderedSyncClient, type SyncOperation } from '@webobsidian/sync-core';
+import { assertServerPathAllowed, type OrderedSyncClient, type SyncOperation } from '@picassio/sync-core';
 import { FilesystemAdapter } from './fs-adapter.js';
 import { HeadlessStore, type PendingPath } from './state.js';
 import { NodeSyncTransport } from './transport.js';

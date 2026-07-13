@@ -1,4 +1,4 @@
-import type { SyncEvent, SyncOperation } from '@webobsidian/sync-core';
+import type { SyncEvent, SyncOperation } from '@picassio/sync-core';
 
 export interface BrowserDeviceState {
   deviceId: string;

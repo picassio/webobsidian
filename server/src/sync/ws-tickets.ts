@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 
 interface Ticket { deviceId: string; expiresAt: number }
 

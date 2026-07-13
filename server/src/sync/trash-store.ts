@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { IdSchema, Sha256Schema, VaultPathSchema } from '@webobsidian/sync-core';
+import { IdSchema, Sha256Schema, VaultPathSchema } from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 
 const TRASH_SCHEMA_VERSION = 1;

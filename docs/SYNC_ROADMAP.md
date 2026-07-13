@@ -92,7 +92,7 @@ the synchronized namespace.
 | Binary conflict | Conflict copy | Binary merge is unsafe. |
 | Runtime metadata | Atomic segmented JSON + write-ahead transaction intents | Preserves no-database v1 while defining crash recovery. |
 | Plugin repository | Separate public repository | Obsidian submission expects manifest/release at repository root. |
-| Shared implementation | Versioned `@webobsidian/sync-core` package | Avoid protocol drift between plugin and headless client. |
+| Shared implementation | Versioned `@picassio/sync-core` package | Avoid protocol drift between plugin and headless client. |
 | Git | Server-only backup/export | Git snapshots remain useful but are not live sync. |
 | `.obsidian` | Excluded entirely in v1 | Avoids device-state loops and undocumented plugin-data semantics. |
 | Workspace | Per-device by default | Opening a note on one device MUST NOT switch another device. |

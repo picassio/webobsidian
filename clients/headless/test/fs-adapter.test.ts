@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { sha256Text, type SyncEntry } from '@webobsidian/sync-core';
+import { sha256Text, type SyncEntry } from '@picassio/sync-core';
 import { FilesystemAdapter } from '../src/fs-adapter.js';
 import { HeadlessStore } from '../src/state.js';
 

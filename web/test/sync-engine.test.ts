@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sha256Text, type OperationResult, type SyncEvent, type SyncOperation } from '@webobsidian/sync-core';
+import { sha256Text, type OperationResult, type SyncEvent, type SyncOperation } from '@picassio/sync-core';
 import { BrowserSyncEngine, type LocalSyncAdapter, type SyncTransport } from '../src/lib/sync-engine.js';
 import { BrowserLocalSyncAdapter } from '../src/lib/browser-sync-adapter.js';
 import { useStore } from '../src/lib/store.js';

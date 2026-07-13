@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, promises as fs, type ReadStream } from 'node:fs';
 import path from 'node:path';
-import { Sha256Schema, timingSafeHexEqual } from '@webobsidian/sync-core';
+import { Sha256Schema, timingSafeHexEqual } from '@picassio/sync-core';
 import { ensureSyncStorage } from './storage.js';
 
 export interface BlobInfo { hash: string; size: number; file: string }

@@ -3,7 +3,7 @@ import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode } from './tree';
 import { IndexedDbSyncPersistence, type PersistedDraft } from './sync-db';
 import type { SyncConnectionStatus } from './sync-engine';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

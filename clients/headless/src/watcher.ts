@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { evaluatePathPolicy } from '@webobsidian/sync-core';
+import { evaluatePathPolicy } from '@picassio/sync-core';
 import { FilesystemAdapter } from './fs-adapter.js';
 import { FilesystemMutationQueue } from './local-queue.js';
 import { HeadlessStore } from './state.js';

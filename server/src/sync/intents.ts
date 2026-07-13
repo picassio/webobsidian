@@ -13,7 +13,7 @@ import {
   type Conflict,
   type OperationResult,
   type SyncEvent,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 
 const INTENT_SCHEMA_VERSION = 1;

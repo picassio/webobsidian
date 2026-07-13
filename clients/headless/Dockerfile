@@ -7,7 +7,7 @@ COPY packages/sync-core/src ./packages/sync-core/src
 COPY clients/headless/package.json clients/headless/tsconfig.json ./clients/headless/
 COPY clients/headless/src ./clients/headless/src
 RUN npm ci --ignore-scripts && \
-    npm --workspace @webobsidian/sync-core run build && \
+    npm --workspace @picassio/sync-core run build && \
     npm --workspace web-vault-sync run build && \
     npm prune --omit=dev && \
     mkdir -p /runtime/config /runtime/vault

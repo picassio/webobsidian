@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { IdSchema, OperationResultSchema, Sha256Schema, type OperationResult } from '@webobsidian/sync-core';
+import { IdSchema, OperationResultSchema, Sha256Schema, type OperationResult } from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 
 const IDEMPOTENCY_SCHEMA_VERSION = 1;

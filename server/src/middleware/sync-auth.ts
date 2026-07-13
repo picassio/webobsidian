@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { PROTOCOL_VERSION, type Device } from '@webobsidian/sync-core';
+import { PROTOCOL_VERSION, type Device } from '@picassio/sync-core';
 import { getSyncDeviceStore } from '../services/sync-runtime.js';
 
 declare global {

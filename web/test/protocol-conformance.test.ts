@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import type { SyncOperation } from '@webobsidian/sync-core';
+import type { SyncOperation } from '@picassio/sync-core';
 import { HttpSyncTransport } from '../src/lib/sync-engine';
 
 const fixture = JSON.parse(await readFile(new URL('../../packages/sync-core/fixtures/protocol-v1.json', import.meta.url), 'utf8')) as Record<string, unknown>;

@@ -12,7 +12,7 @@ import {
   PairingCodeRequestSchema,
   PairRequestSchema,
   PROTOCOL_VERSION,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { BROWSER_SYNC_COOKIE, requireSecureSyncTransport, requireSyncDevice, syncError } from '../middleware/sync-auth.js';

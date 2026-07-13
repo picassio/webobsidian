@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Conflict, Device } from '@webobsidian/sync-core';
+import type { Conflict, Device } from '@picassio/sync-core';
 import { useStore } from '../lib/store';
 import { api, type SyncDoctorResponse, type SyncHealthResponse } from '../lib/api';
 import Icon from './Icon';

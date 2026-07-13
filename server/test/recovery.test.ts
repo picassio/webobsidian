@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { sha256Text, type OperationResult, type SyncEvent } from '@webobsidian/sync-core';
+import { sha256Text, type OperationResult, type SyncEvent } from '@picassio/sync-core';
 import { CoordinatorError, SyncCoordinator } from '../src/sync/coordinator.js';
 import { TransactionIntentStore } from '../src/sync/intents.js';
 import { JournalStore } from '../src/sync/journal.js';

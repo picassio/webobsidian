@@ -10,7 +10,7 @@ import {
   sha256Chunks,
   type SyncEntry,
   type SyncEvent,
-} from '@webobsidian/sync-core';
+} from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 import { JournalStore } from './journal.js';
 

@@ -2,7 +2,7 @@ import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { IdSchema, Sha256Schema } from '@webobsidian/sync-core';
+import { IdSchema, Sha256Schema } from '@picassio/sync-core';
 import { BlobStore } from './blob-store.js';
 import { AsyncMutex } from './locks.js';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';

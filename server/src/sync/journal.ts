@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { SyncEventSchema, type SyncEvent } from '@webobsidian/sync-core';
+import { SyncEventSchema, type SyncEvent } from '@picassio/sync-core';
 import { AtomicJsonStore, CorruptSyncMetadataError, ensureSyncStorage } from './storage.js';
 
 const SEGMENT_SCHEMA_VERSION = 1;

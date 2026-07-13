@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.9 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.10, `@picassio/sync-core`, and `web-vault-sync` public; registry-origin Linux/systemd/sidecar gates complete; remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -511,11 +511,10 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 ## Phase 36 — Native Obsidian community plugin — FR-13
 - [x] M36.1 Tạo public repo riêng `central-vault-sync` từ sample plugin; manifest id unique không chứa
       `obsidian`, README/LICENSE/versions/privacy/network behavior; desktop+mobile (`isDesktopOnly:false`).
-- [~] M36.2 Publish/version public `@webobsidian/sync-core` package + protocol conformance fixtures; plugin
+- [x] M36.2 Publish/version public `@picassio/sync-core@0.1.2` package + protocol conformance fixtures; plugin
       adapter dùng Obsidian Vault text/binary API, `requestUrl`, one-use-ticket WebSocket và lifecycle registerEvent.
-      npm authentication now identifies `picassio`, but first publication returns `E404 Scope not found` until the
-      owner creates/authorizes the `@webobsidian` npm organization/scope; headless publication is held to avoid a
-      public package with an unavailable exact dependency.
+      User explicitly selected the existing personal npm scope instead of creating `@webobsidian`; server/browser/
+      headless imports migrated, core published first, plugin 0.1.10 consumes the public exact dependency without vendor tarball.
 - [x] M36.3 Pair/settings: server URL test, SecretStorage token, device name, pair/unpair, stricter client
       excludes (không override `.obsidian/.git/.trash`), fallback poll, mobile confirm ≥100MiB; raw token
       không vào `data.json` hay vault.
@@ -563,7 +562,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [~] M37.8 Headless E2E Linux/macOS + amd64/arm64: two daemon clients, browser/plugin interop,
       offline/restart/crash, large binary bounded memory; npm package/signing/SBOM release. Linux two-client
       create/catch-up, clean stale diff3 merge, overlapping-edit conflict copy, convergence, and contiguous
-      two-device journal were exercised against the production build; macOS and npm publication remain external.
+      two-device journal were exercised against the production build; public npm install/systemd/sidecar/reinstall
+      passed on Linux. Real macOS execution remains external.
 
 ## Phase 38 — Git transition: backup/version history, không live sync — FR-4/FR-13
 - [x] M38.1 Rename Settings/Ribbon/status/docs từ “GitHub Sync” thành “Git Backup & Version History” khi
@@ -603,14 +603,29 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       telemetry-free diagnostics, no open critical/high data-loss/security bug.
 - [ ] M40.4 Stable server release: compatibility/migration/rollback docs, signed artifacts/SBOM, reproducible
       local amd64/arm64 Docker builds, upgrade preserves vault and Git history; recovery drills recorded.
-- [ ] M40.5 Publish headless npm package + local amd64/arm64 Docker build examples; verify clean Linux server
+- [x] M40.5 Publish headless npm package + local amd64/arm64 Docker build examples; verify clean Linux server
       install, systemd boot, sidecar health and unattended upgrade. Registry image publication is intentionally out.
-      Local packed-artifact upgrade from core 0.1.1/pre-marker state to core 0.1.2 preserves token/device/cursor/vault,
-      migrates state additively, accepts the next revision, and passes doctor; npm-origin publication/install remains.
+      `web-vault-sync@0.1.0` + exact `@picassio/sync-core@0.1.2` are public; registry-origin dedicated-user
+      pair/sync/status/doctor, hardened systemd active push, healthy non-root source-built sidecar, graceful stop,
+      and reinstall preserving external token/state hashes all passed. Earlier pre-marker packed upgrade remains valid.
 - [ ] M40.6 Community plugin approval/installability + support docs: pairing, mobile limitations, conflicts,
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Personal npm scope publication + registry-origin M40.5): user explicitly rejected creating an npm
+  organization and selected personal scope `@picassio`. PRD bumped to 1.8; every server/browser/headless import,
+  package manifest/lock, Docker build, workflow and current doc moved from `@webobsidian/sync-core` to
+  `@picassio/sync-core` without changing Protocol 1.0. Full root typecheck, 126 tests (including 1 GiB), build,
+  OpenAPI/Markdown lint and zero-vulnerability audit passed. Published public `@picassio/sync-core@0.1.2`
+  (SHA-1 `6ebe86f6…8120`, integrity `sha512-X70Ok…`) then exact-dependent `web-vault-sync@0.1.0`
+  (SHA-1 `d9469c96…dd33`, integrity `sha512-QCqCS…`). Clean registry installs imported Protocol 1.0, ran the CLI,
+  resolved the exact core dependency and audited clean. A fresh production server plus dedicated system user proved
+  registry-origin init/pair/push/status/doctor at cursor 1; the shipped hardened unit reached active and watcher-pushed
+  cursor 2; a source-built scope-migrated non-root sidecar became Docker healthy, pushed exact bytes, and stopped with
+  exit 0. Same-version unattended reinstall preserved external state/token hashes and restarted at cursor 2.
+  `NPM_TOKEN` was configured from 1Password without exposure. Plugin removed its vendored 0.1.1 tarball, consumes
+  public core 0.1.2, and published 0.1.10 (source/tag `e430b67`; CI 29252582130/release 29252583800). M36.2 and
+  M40.5 are complete; M37.8 remains partial only for real macOS.
 - 2026-07-13 (Rename-event burst ordering + exact plugin 0.1.9): queue audit found a destination upsert could
   replace a durable rename marker, while a pre-rename modify marker pointed at the now-missing old path. The result
   could create a second identity at the destination and leave stale server content. Pending markers now coalesce
@@ -696,8 +711,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   passed CI run 29240963980 with all 126 tests and the full dual-E2E/docs/API/audit/systemd/multi-arch matrix.
   Actual core 0.1.2 publication reached npm but returned `E404 Scope not found`; the user-owned `@webobsidian`
   organization/scope has not been created or authorized. Headless was deliberately not published because its exact
-  core dependency would be unavailable. Required external action: create/authorize the npm scope, then retry core
-  first; credentials/tokens must not be shared in chat.
+  core dependency would be unavailable. At that point the required action was creating/authorizing the org scope;
+  this blocker was later superseded by the explicit PRD 1.8 decision to publish under `@picassio`, while the rule
+  that credentials/tokens must not be shared in chat remains.
 - 2026-07-13 (Installed headless upgrade + CLI failure-path repair): a real isolated global-prefix drill installed
   packed commit `4d45e88` (`sync-core` 0.1.1 + pre-marker `web-vault-sync`), paired/synced revision 1, replaced it
   with current packed core 0.1.2/headless bytes, then proved unchanged credential/device/cursor/vault, additive

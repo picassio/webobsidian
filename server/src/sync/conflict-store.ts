@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { ConflictSchema, OperationResultSchema, type Conflict, type OperationResult } from '@webobsidian/sync-core';
+import { ConflictSchema, OperationResultSchema, type Conflict, type OperationResult } from '@picassio/sync-core';
 import { AtomicJsonStore, ensureSyncStorage } from './storage.js';
 
 const CONFLICT_SCHEMA_VERSION = 1;

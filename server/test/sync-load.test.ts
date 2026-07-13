@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { sha256Text, type SyncEntry, type SyncEvent } from '@webobsidian/sync-core';
+import { sha256Text, type SyncEntry, type SyncEvent } from '@picassio/sync-core';
 import { JournalStore } from '../src/sync/journal.js';
 import { ManifestSnapshotStore } from '../src/sync/manifest-snapshots.js';
 import { RevisionStore } from '../src/sync/revision-store.js';

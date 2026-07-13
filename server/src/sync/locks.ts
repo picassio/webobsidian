@@ -1,4 +1,4 @@
-import { normalizeVaultPath } from '@webobsidian/sync-core';
+import { normalizeVaultPath } from '@picassio/sync-core';
 
 interface Waiter {
   paths: string[];

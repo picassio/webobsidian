@@ -10,7 +10,7 @@ import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { getSyncBlobStore, getSyncCoordinator } from '../services/sync-runtime.js';
 import { CoordinatorError, LEGACY_WEB_ACTOR } from '../sync/coordinator.js';
-import { sha256Bytes, type OperationResult, type SyncEntry } from '@webobsidian/sync-core';
+import { sha256Bytes, type OperationResult, type SyncEntry } from '@picassio/sync-core';
 
 export const filesRouter = Router();
 filesRouter.use(requireAuth);

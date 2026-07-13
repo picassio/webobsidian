@@ -6,7 +6,7 @@ import http from 'node:http';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import test from 'node:test';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 import { syncRouter } from '../src/routes/sync.js';
 import { initializeSyncRuntime, getSyncCoordinator, getSyncDeviceStore } from '../src/services/sync-runtime.js';
 import { wsTickets, WsTicketStore } from '../src/sync/ws-tickets.js';

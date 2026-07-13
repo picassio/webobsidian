@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { sha256Text } from '@webobsidian/sync-core';
+import { sha256Text } from '@picassio/sync-core';
 import { HeadlessStore } from '../src/state.js';
 
 test('headless state is checksummed, atomic, mode 0600, outside vault, and token is separate', async (t) => {
