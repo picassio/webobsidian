@@ -310,8 +310,8 @@ See [PRD.md §2](PRD.md) for the full design.
   undergoing stable-release validation. Git is backup/version history only while Central Sync is enabled.
 - 🧩 The mobile-compatible native plugin source is public at
   [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync); the downloadable
-  [0.1.10 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.10) is not yet accepted
-  in Community Plugins. [`@picassio/sync-core@0.1.2`](https://www.npmjs.com/package/@picassio/sync-core/v/0.1.2)
+  [0.1.12 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.12) is not yet accepted
+  in Community Plugins. [`@picassio/sync-core@0.1.3`](https://www.npmjs.com/package/@picassio/sync-core/v/0.1.3)
   and [`web-vault-sync@0.1.0`](https://www.npmjs.com/package/web-vault-sync/v/0.1.0) are public and registry-origin
   verified with Linux systemd and a healthy non-root sidecar. Registry container images remain intentionally unpublished.
   See the [roadmap](docs/SYNC_ROADMAP.md), [compatibility matrix](docs/sync/COMPATIBILITY.md),

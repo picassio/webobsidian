@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.10, `@picassio/sync-core`, and `web-vault-sync` public; registry-origin Linux/systemd/sidecar gates complete; remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.12, `@picassio/sync-core@0.1.3`, and `web-vault-sync` public; deployed browser/headless/real-Obsidian Linux acceptance passed; remaining real platforms, independent alpha/beta, stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -500,9 +500,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       clean open file auto apply ≤2s, dirty file conflict state.
 - [x] M35.5 Conflict UI: side-by-side/base-current-local diff, keep server/keep local/save merged/create copy;
       binary metadata/download; unresolved badge/toast không chặn file khác.
-- [~] M35.6 Settings → Sync: pairing codes, device list/last seen/revoke, conflict center, journal/doctor health,
-      scope/exclude policy và diagnostics export redacted. Real-use audit found the API existed without the promised
-      external-client pairing control; the UI and production-browser regression are implemented, live validation active.
+- [x] M35.6 Settings → Sync: pairing codes, device list/last seen/revoke, conflict center, journal/doctor health,
+      scope/exclude policy và diagnostics export redacted. Real-use audit found and repaired the missing external-client
+      pairing control; deployed UI generated one-use codes used by two published headless clients and real Obsidian.
 - [x] M35.7 Status UI `Synced/Syncing/Offline/Conflict/Error` + sequence lag; tách hoàn toàn Git backup status.
 - [x] M35.8 Đổi `uistate.json` sang per-device workspace mặc định; migration từ shared state; mobile drawer/
       clipboard vẫn local; không còn thiết bị A tự chuyển tab thiết bị B.
@@ -512,10 +512,10 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 ## Phase 36 — Native Obsidian community plugin — FR-13
 - [x] M36.1 Tạo public repo riêng `central-vault-sync` từ sample plugin; manifest id unique không chứa
       `obsidian`, README/LICENSE/versions/privacy/network behavior; desktop+mobile (`isDesktopOnly:false`).
-- [x] M36.2 Publish/version public `@picassio/sync-core@0.1.2` package + protocol conformance fixtures; plugin
+- [x] M36.2 Publish/version public `@picassio/sync-core@0.1.3` package + protocol conformance fixtures; plugin
       adapter dùng Obsidian Vault text/binary API, `requestUrl`, one-use-ticket WebSocket và lifecycle registerEvent.
       User explicitly selected the existing personal npm scope instead of creating `@webobsidian`; server/browser/
-      headless imports migrated, core published first, plugin 0.1.10 consumes the public exact dependency without vendor tarball.
+      headless imports migrated, core published first, plugin 0.1.12 consumes the public exact dependency without vendor tarball.
 - [x] M36.3 Pair/settings: server URL test, SecretStorage token, device name, pair/unpair, stricter client
       excludes (không override `.obsidian/.git/.trash`), fallback poll, mobile confirm ≥100MiB; raw token
       không vào `data.json` hay vault.
@@ -535,9 +535,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.9 bytes complete the Linux matrix:
-      concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
-      exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.12 bytes complete the Linux matrix:
+      deployed pair/pull/push, Markdown/binary, immediate rename→modify, delete, outage/hard restart, offline cold
+      start/retry, unsaved-editor conflict copy, exact hashes and clean durable state; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
       attach `main.js`, `manifest.json`, optional `styles.css`; private alpha + public beta.
 - [ ] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
@@ -613,28 +613,29 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
-- 2026-07-13 (Real Obsidian wake/echo race repair): exact public plugin 0.1.10 on Obsidian Linux 1.12.7 paired
-  to the deployed server and pulled the live browser/headless vault, including the PNG attachment. A real create plus
-  binary upload exposed a timing race: the server wake could start catch-up while the same local path marker was still
-  present, producing a transient `local changes pending ... remote apply deferred` error even though later retry
-  converged. Sync core 0.1.3 now supports durable enqueue-before-publish and orders wake/poll work as flush-before-pull;
-  plugin-side staging clears the path marker only after the operation is durable and before network publication, while
-  idempotent matching echoes avoid unnecessary rewrites. Core wake/staging regressions and plugin marker/echo regressions
-  pass; all 129 repository tests and root typecheck pass. Public core/plugin patch publication and exact-release live
-  rerun are in progress.
+- 2026-07-13 (Deployed real-use browser/headless/plugin acceptance): real UI pairing generated one-use credentials
+  for two registry-origin `web-vault-sync@0.1.0` clients and exact public plugin 0.1.12 on Obsidian Linux 1.12.7.
+  Browser note/link/backlink/search, first-directory PNG drop, two-headless catch-up/diff3/conflict/watch/status/doctor,
+  browser conflict resolution, and plugin upgrade/pull/Markdown+binary/immediate rename→modify/delete all converged.
+  Endpoint outage plus offline hard restart retained plugin work; an unsaved open-editor overlap preserved canonical
+  remote bytes and an exact local conflict copy. Real use found and fixed the browser attachment-parent bug and a
+  plugin wake/echo race; core 0.1.3 adds durable enqueue-before-publish and flush-before-pull wake/poll ordering, while
+  plugin 0.1.12 safely advances already-materialized rename metadata without replacing later local bytes. Core/plugin
+  regressions, 129 repository tests, CI 29264703837, plugin Node 20/22/24 CI 29265124982, and release CI 29265127275
+  pass. Disposable files/conflicts were resolved/removed, all test devices revoked, and both headless doctors were clean.
 - 2026-07-13 (Real-use browser attachment parent repair): dragging the first image into a newly paired real browser
   exposed that attachment upload submitted `attachments/<file>` before the explicit parent directory existed. The
   coordinator correctly refused materialization, but the optimistic editor embed made the failure non-obvious. Browser
   upload preparation now serializes sequence allocation, durably queues every missing parent `mkdir` before the file,
   reuses projected/queued/session-known directories, and preserves order across concurrent drops. A regression covers
   nested parent creation, duplicate suppression, existing projections, pending offline mkdirs, and sequence ordering;
-  web tests and root typecheck pass. Live redeploy/retest is in progress.
+  web tests/root typecheck pass; deployed drag/drop committed exact PNG bytes and cross-client pull succeeded.
 - 2026-07-13 (Real-use external pairing UX audit): opening Settings → Central Sync as an operator exposed that
   browser self-pairing worked but the documented 10-minute one-use code for Obsidian/headless clients had no UI.
   Added a device-name hint, explicit Create pairing code action, read-only one-use code/expiry display and clipboard
   action without diagnostics persistence. Browser E2E now generates and schema-checks a real code through rendered
   Settings, and the standalone command now rebuilds the SPA before execution so stale `server/public` cannot mask UI
-  regressions. Typecheck and the expanded browser E2E pass; live deployed UI/client validation is in progress.
+  regressions. Typecheck/E2E pass; deployed UI codes paired two headless clients and real Obsidian successfully.
 - 2026-07-13 (Compose IPv4 health regression): a production-like source deployment exposed that Compose overrode
   the already-correct Dockerfile healthcheck with `localhost`; Alpine resolved it to IPv6 while Node listened on IPv4,
   producing false `unhealthy` state despite a healthy API. Changed Compose to `127.0.0.1`, added a CI contract

@@ -1,5 +1,28 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.12-release.png`
+
+Exact public `central-vault-sync` 0.1.12 assets were downloaded from the tagged release and matched the release API
+SHA-256 digests: `d5fe3682…bd81` (`main.js`), `effc4d35…bb4d` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows the exact build loaded in real Obsidian Linux 1.12.7 and the
+synchronized status after deployed-server testing. The visible SecretStorage warning is expected on this disposable
+Xvfb host without a desktop keychain; the token remained absent from plugin data, logs, diagnostics, and the vault.
+
+Real use first reproduced a wake/local-echo race in 0.1.10 and a narrower immediate rename→modify echo race in the
+superseded 0.1.11 draft. Public 0.1.12 uses `@picassio/sync-core@0.1.3`: local operations are durably staged before
+path markers clear and before publication, wake/poll catch-up flushes local operations first, matching echoes avoid
+rewrites, and an already-materialized rename advances metadata without replacing a later local destination edit.
+Core/plugin regressions cover each boundary.
+
+The exact-release deployed matrix proved one-use pairing and preserved paired state across upgrades; initial pull;
+Markdown and six-byte binary create; immediate identity-preserving rename→modify; headless-authored remote pull;
+Markdown/binary delete; endpoint outage with pending state, hard app termination, offline cold start, and recovery;
+and an overlapping remote update while an open editor was unsaved. The latter retained the remote canonical file and
+an exact local conflict copy, then resolved cleanly. Final diagnostics reached cursor 59 with zero conflicts, queue,
+pending paths, apply intents, or errors. Both registry-origin headless clients passed doctor; disposable active files
+were removed and every test device was revoked. Windows, macOS, Android, iOS, independent beta, and Community
+acceptance remain separate external gates.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.9-release.png`
 
 The event-burst candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
