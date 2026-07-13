@@ -62,8 +62,7 @@ STEP 3 — Verify (do NOT print the API key) and confirm:
 
 ## Alternative: skills installer
 
-If your runtime supports the [Agent Skills](https://github.com/obsidianmd/obsidian-skills)
-installer:
+If your runtime supports the [`skills` installer](https://github.com/vercel-labs/skills):
 
 ```bash
 npx skills add https://github.com/xnohat/webobsidian --path docs/agent-skill/webobsidian

@@ -24,7 +24,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: test -n "$NODE_AUTH_TOKEN"
       - run: npm ci
-      - run: npm run typecheck && npm test && npm run lint:sync-api && npm audit --audit-level=low && npm run build
+      - run: npm run typecheck && npm test && npm run lint:sync-api && npm run lint:docs && npm audit --audit-level=low && npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:browser
       - run: npm run test:e2e:headless

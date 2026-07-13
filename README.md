@@ -149,7 +149,9 @@ Useful scripts:
 | `npm run dev` | Run server + web together in watch mode |
 | `npm run build` | Build the web SPA, then compile the server |
 | `npm start` | Run the production server (serves built web) |
-| `npm run typecheck` | Type-check both workspaces |
+| `npm run typecheck` | Type-check all workspaces |
+| `npm test` | Run core, server, browser, and headless test suites |
+| `npm run lint:docs` | Validate relative Markdown targets and anchors |
 
 ---
 

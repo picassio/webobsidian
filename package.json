@@ -20,7 +20,8 @@
     "test:e2e:browser": "npm --workspace @webobsidian/sync-core run build && node e2e/browser-pair.mjs",
     "test:e2e:headless": "npm --workspace @webobsidian/sync-core run build && npm --workspace web-vault-sync run build && npm --workspace server run build && node e2e/headless-pair.mjs",
     "generate:sync-schema": "npm --workspace @webobsidian/sync-core run generate:schema",
-    "lint:sync-api": "redocly lint docs/sync/openapi-v1.yaml"
+    "lint:sync-api": "redocly lint docs/sync/openapi-v1.yaml",
+    "lint:docs": "node scripts/check-markdown-links.mjs"
   },
   "devDependencies": {
     "@redocly/cli": "^2.38.0",

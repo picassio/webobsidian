@@ -598,6 +598,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Markdown/link integrity gate): scanned all 25 repository Markdown files outside generated/vendor
+  trees. Every relative target and GitHub-style heading anchor resolves. Live HTTP probes found one stale external
+  reference (`obsidianmd/obsidian-skills`, 404); the documented `npx skills` installer now points to its actual
+  `vercel-labs/skills` repository, and all 30 cited external endpoints return an acceptable live response. Added
+  deterministic `npm run lint:docs` validation and required it in both CI and stable publication workflows;
+  README documents the command. External reachability remains a manual release probe to avoid flaky CI networking.
 - 2026-07-13 (Stable workflow fail-closed publication): audit found the tag workflow could succeed and create
   a GitHub stable release while silently skipping npm publication when `NPM_TOKEN` was absent. Publication is now
   mandatory: the workflow fails before build without the secret, runs both browser and two-headless-client E2E,

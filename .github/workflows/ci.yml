@@ -28,8 +28,8 @@ jobs:
       - name: Unit, fault, scale, and recovery tests
         run: npm test
 
-      - name: Validate Sync OpenAPI
-        run: npm run lint:sync-api
+      - name: Validate Sync OpenAPI and Markdown links
+        run: npm run lint:sync-api && npm run lint:docs
 
       - name: Dependency audit
         run: npm audit --audit-level=low
