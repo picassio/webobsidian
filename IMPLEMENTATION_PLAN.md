@@ -596,6 +596,13 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Main publication + CI): user explicitly authorized committing/pushing the complete working tree.
+  Commit `e3c7435` is public on `picassio/webobsidian`; CI run 29228551700 passed both jobs: fresh npm install,
+  typecheck, all 122 tests, OpenAPI, zero-vulnerability audit, build, real two-browser production E2E, systemd
+  validation, server image build, QEMU amd64/arm64 headless build and non-root smoke. The only annotations were
+  GitHub's Node 20 deprecation in action runtimes; CI/release workflows were immediately advanced to current
+  checkout v7, setup-node v6 and Docker setup v4 majors for the next run. Stable tag remains correctly withheld
+  until npm authentication/scope setup, Community submission/review, and unavailable real-platform gates resolve.
 - 2026-07-13 (M31.7 adapter/cross-version conformance complete): added browser-cookie and headless-bearer
   transport tests that consume the same Protocol 1.0 golden handshake/manifest/change/operation transcript and
   verify transport-specific credentials. Their initial future-version tests correctly exposed a real gap: shared
