@@ -1,6 +1,9 @@
 services:
   web-vault-sync:
-    image: ghcr.io/picassio/web-vault-sync:0.1.0
+    image: web-vault-sync:local
+    build:
+      context: ../../..
+      dockerfile: clients/headless/Dockerfile
     user: node
     restart: unless-stopped
     init: true

@@ -52,17 +52,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build image
-        run: docker build -t webobsidian:ci .
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build headless client for amd64 and arm64
-        run: docker buildx build --platform linux/amd64,linux/arm64 -f clients/headless/Dockerfile --output type=oci,dest=/tmp/web-vault-sync.oci .
+      - name: Build server for amd64 and arm64 with attestations
+        run: docker buildx build --platform linux/amd64,linux/arm64 --sbom=true --provenance=mode=max --output type=oci,dest=/tmp/webobsidian.oci .
+
+      - name: Build headless client for amd64 and arm64 with attestations
+        run: docker buildx build --platform linux/amd64,linux/arm64 --sbom=true --provenance=mode=max -f clients/headless/Dockerfile --output type=oci,dest=/tmp/web-vault-sync.oci .
 
       - name: Smoke-test non-root headless image
         run: |

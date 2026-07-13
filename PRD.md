@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.6 · Cập nhật: 2026-07-13 · Trạng thái: Draft
+> Phiên bản: 1.7 · Cập nhật: 2026-07-13 · Trạng thái: Draft
+> Changelog 1.7 (container distribution): theo quyết định vận hành của người dùng, WebObsidian và headless
+> client **không publish container lên GHCR/registry**. Dockerfiles vẫn là release artifacts được CI build/smoke
+> cho amd64/arm64 với SBOM/provenance validation; operator clone source/tag đã kiểm chứng và tự build image.
+> npm publication của `sync-core`/headless và Obsidian Community publication vẫn giữ nguyên phạm vi.
 > Changelog 1.6 (stable-write hardening): mọi update/rename/delete/copy/Agent mutation của entry hiện có
 > bắt buộc `baseRevision`/`If-Match`; compatibility fallback chọn revision hiện tại đã bị xoá để không còn
 > cửa silent overwrite. Agent mutation cũng bắt buộc monotonic `clientSequence` + `idempotencyKey`. Settings
@@ -610,4 +614,5 @@ data/sync/
 11. Linux headless client chạy one-shot, watch, systemd và Docker sidecar; status/doctor/conflict commands hoạt động.
 12. Revoke device cắt quyền; retry cùng idempotency key không tạo mutation trùng; traversal/symlink/blob hash test pass.
 13. Git backup không tự pull mutate live vault trong Central Sync mode; explicit restore tạo normal revision/events.
-14. Plugin initial release qua review Community directory; headless npm + amd64/arm64 image được publish.
+14. Plugin initial release qua review Community directory; headless npm được publish; Dockerfiles được CI
+    build/smoke amd64+arm64 và tài liệu clone/tag + local build được kiểm chứng (không publish registry image).

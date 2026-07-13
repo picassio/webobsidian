@@ -2,7 +2,8 @@
 
 Linux CLI and long-running filesystem daemon for WebObsidian Central Sync Protocol 1.0. The package uses the same `@webobsidian/sync-core` ordered client as the browser and native plugin.
 
-> `0.1.x` is pre-release. npm/container publication occurs after the complete cross-client recovery matrix.
+> `0.1.x` is pre-release. npm publication occurs after the complete cross-client recovery matrix; container
+> deployment is built locally from the verified source tag rather than downloaded from a registry.
 
 ## Safety
 
@@ -82,7 +83,9 @@ docker run --rm \
   web-vault-sync:0.1.0 init --server https://vault.example.com --vault /vault
 ```
 
-The image is non-root and architecture-neutral. CI publishes the same Dockerfile for `linux/amd64` and `linux/arm64` only after both smoke tests pass.
+The image is non-root and architecture-neutral. CI builds/smoke-tests this Dockerfile for `linux/amd64` and
+`linux/arm64`, but the project intentionally does not publish registry images. Clone the verified source tag and
+build locally; use `docker buildx build --platform linux/amd64,linux/arm64` when producing both architectures.
 
 ## Scope and privacy
 

@@ -309,8 +309,9 @@ See [PRD.md §2](PRD.md) for the full design.
 - 🧩 The mobile-compatible native plugin source is public at
   [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync); the downloadable
   [0.1.2 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.2) is not yet accepted
-  in Community Plugins. `web-vault-sync` is implemented/tested as a non-root daemon/image but npm/GHCR publication
-  remains credential-gated. See the [roadmap](docs/SYNC_ROADMAP.md), [compatibility matrix](docs/sync/COMPATIBILITY.md),
+  in Community Plugins. `web-vault-sync` is implemented/tested as a non-root daemon and reproducible local
+  amd64/arm64 image; npm publication remains credential-gated and registry images are intentionally not published.
+  See the [roadmap](docs/SYNC_ROADMAP.md), [compatibility matrix](docs/sync/COMPATIBILITY.md),
   and [operations runbook](docs/sync/OPERATIONS.md).
 - ⚠️ Community-plugin support is a **subset** of the Obsidian API; plugins relying on
   Electron/Node internals may not work.

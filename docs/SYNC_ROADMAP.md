@@ -566,13 +566,14 @@ synchronized vault.
   remote divergence into conflict instead of applying remote content; `one-shot` runs the selected mode to a
   durable cursor/queue boundary and exits.
 - Sidecar container runs non-root and supports bind-mounted vault, read-only credentials, healthcheck, and
-  multi-architecture images.
+  reproducible amd64/arm64 builds from the verified source tag; no registry image is published.
 
 ### 9.3 Packaging
 
 - Public npm package with `bin` entry for Node 20+ and lockfile-reproducible install.
 - Tested systemd unit/install instructions; no standalone executable, Debian package, or RPM in v1.
-- Dedicated non-root Docker image published for amd64/arm64 with SBOM and immutable version tag.
+- Dedicated non-root Dockerfile is CI-built/smoked for amd64/arm64 with SBOM/provenance validation. Operators
+  clone the immutable verified source tag and build locally; the project does not publish registry images.
 
 ## 10. Git transition
 
@@ -736,7 +737,8 @@ foreground catch-up, the headless client, Git transition, and community plugin p
 ### Stable / Community Directory
 
 - Plugin accepted and installable from Obsidian Community Plugins.
-- Headless npm package, systemd example, and amd64/arm64 container published.
+- Headless npm package and systemd example published; documented local Docker build from the verified source
+  tag reproduces the CI-tested amd64/arm64 image without a registry dependency.
 - Sync protocol compatibility policy documented.
 - Upgrade from the previous WebObsidian release preserves vault files and Git history.
 - Recovery drills demonstrate restore from metadata corruption, backup, and conflict state.

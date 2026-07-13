@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin prerelease public; npm/GHCR, real platform matrices, alpha/beta/stable, and Community acceptance remain externally gated)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin prerelease public; npm, real platform matrices, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -588,14 +588,22 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       collect protocol/diagnostic feedback, migration tested on copied real vaults.
 - [ ] M40.3 Public beta: mobile foreground catch-up, all client pair matrix, docs/systemd/Docker, Git transition,
       telemetry-free diagnostics, no open critical/high data-loss/security bug.
-- [ ] M40.4 Stable server release: compatibility/migration/rollback docs, signed artifacts/SBOM, Docker multi-arch,
-      upgrade preserves vault and Git history; recovery drills recorded.
-- [ ] M40.5 Publish headless npm package + amd64/arm64 image and examples; verify clean Linux server install,
-      systemd boot, sidecar health and unattended upgrade.
+- [ ] M40.4 Stable server release: compatibility/migration/rollback docs, signed artifacts/SBOM, reproducible
+      local amd64/arm64 Docker builds, upgrade preserves vault and Git history; recovery drills recorded.
+- [ ] M40.5 Publish headless npm package + local amd64/arm64 Docker build examples; verify clean Linux server
+      install, systemd boot, sidecar health and unattended upgrade. Registry image publication is intentionally out.
 - [ ] M40.6 Community plugin approval/installability + support docs: pairing, mobile limitations, conflicts,
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Container distribution scope changed by user): user explicitly requested no GitHub/registry
+  container publication; consumers clone and build locally. PRD bumped to 1.7 and roadmap/plan/docs/examples/release
+  workflow changed in the same update: CI still proves non-root amd64/arm64 builds plus SBOM/provenance, while
+  stable release publishes source/npm/GitHub artifacts only. A beta push had completed immediately before the
+  instruction arrived (`web-vault-sync` digest `sha256:4573d9...`, `webobsidian` `sha256:bfe0c6...`); both GHCR
+  packages are private. REST deletion and OCI manifest deletion were attempted but rejected because the current
+  token lacks `delete:packages` (403/405). Owner must delete both private packages in GitHub package settings or
+  authorize `read:packages,delete:packages`; they are not documented or offered to users.
 - 2026-07-13 (Main publication + CI): user explicitly authorized committing/pushing the complete working tree.
   Commit `e3c7435` is public on `picassio/webobsidian`; CI run 29228551700 passed both jobs: fresh npm install,
   typecheck, all 122 tests, OpenAPI, zero-vulnerability audit, build, real two-browser production E2E, systemd
@@ -625,8 +633,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   copies built sync-core runtime artifacts into the final image. The next smoke exposed `localhost` resolving to
   IPv6 while the server listens IPv4; healthcheck now targets `127.0.0.1`. A second clean build completed all four
   workspace builds with zero install vulnerabilities, and the mounted production container booted writable with
-  Sync initialized and reached Docker `healthy` with a successful `/healthz` payload. M40.4 remains partial only
-  because the stable multi-arch GHCR image cannot be published without the release commit/tag/token scope.
+  Sync initialized and reached Docker `healthy` with a successful `/healthz` payload. At that point M40.4 still
+  named GHCR publication; this historical gate was superseded by the explicit PRD 1.7 local-build decision.
 - 2026-07-13 (Real Obsidian desktop + plugin 0.1.1): discovered that prerelease 0.1.0 required future
   Obsidian 1.13 APIs while latest stable is 1.12.7. Reworked settings/reset UI off 1.13-only APIs and set the
   SecretStorage-correct minimum 1.11.4; policy/type/lint/build and 8/8 mock/conformance tests pass. Installed the
@@ -658,14 +666,16 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   full typecheck/build, OpenAPI/audit/diff, and two-browser E2E pass with no known silent overwrite or open
   critical/high. Added publishable sync-core README/LICENSE/metadata, compatibility/upgrade/rollback/mobile/privacy
   guide, and tag-gated release workflow with full gates, npm provenance, CycloneDX SBOM, checksums, GitHub
-  attestations/releases, and multi-arch GHCR SBOM/provenance. Thus M40.1 local technical-preview gate is complete;
+  attestations/releases, and (historically) multi-arch GHCR SBOM/provenance; registry publication was later removed
+  by PRD 1.7 while CI build attestations remain. Thus M40.1 local technical-preview gate is complete;
   alpha/beta/stable external gates remain open.
 - 2026-07-13 (Plugin/headless artifact evidence): published plugin 0.1.0 as an explicit GitHub prerelease (not
   draft) with downloadable `main.js`, `manifest.json`, `styles.css`; remote release and CI both verified, downloaded
   SHA-256 values match. Community submission now requires the user's linked Obsidian account at
   community.obsidian.md and reviewer acceptance. Headless non-root image rebuilt, user/CLI/init/healthcheck smoke
-  passed; amd64+arm64 SBOM/provenance build completed but GHCR push was denied because the available token lacks
-  package write scope. npm `whoami` is 401, so sync-core/headless npm publication is credential-blocked. M37.7
+  passed; amd64+arm64 SBOM/provenance build completed while the then-required GHCR push was denied. That registry
+  requirement was later superseded by PRD 1.7. npm `whoami` is 401, so sync-core/headless npm publication is
+  credential-blocked. M37.7
   implementation gate is complete; M40.5 publication remains open.
 - 2026-07-13 (M35.9 hoàn tất): added repeatable Playwright/real-Chromium `npm run test:e2e:browser` with two
   isolated browser contexts and production server. It verifies different-note concurrent acceptance, same-note

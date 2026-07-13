@@ -18,7 +18,9 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: sync
-          image: ghcr.io/picassio/web-vault-sync:0.1.0
+          # Build from the verified source tag and load this local image into the cluster first.
+          image: web-vault-sync:local
+          imagePullPolicy: Never
           args: ["watch"]
           env:
             - { name: WEB_VAULT_SYNC_CONFIG_DIR, value: /config }
