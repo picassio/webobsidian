@@ -5,7 +5,7 @@
 | Component | Release line | Protocol | Supported runtime/platform | Status |
 |---|---:|---:|---|---|
 | WebObsidian server/browser | 0.1.x | 1.0 | Node 20/22; current Chromium/Firefox/Safari | Local stable gates passing; public stable release pending. |
-| `central-vault-sync` | 0.1.3 | 1.0 | Obsidian ≥1.11.4 desktop/mobile | Public prerelease; real Linux Obsidian 1.12.7 pair/push/pull/interruption verified; Community acceptance and other OS/mobile matrix pending. |
+| `central-vault-sync` | 0.1.4 | 1.0 | Obsidian ≥1.11.4 desktop/mobile | Public prerelease; real Linux Obsidian 1.12.7 pair/push/pull, concurrent attachments, rename/delete, offline cold start, hard restart, and automatic retry verified; Community acceptance and other OS/mobile matrix pending. |
 | `web-vault-sync` | 0.1.x | 1.0 | Node ≥20; Linux primary; macOS validation pending | npm publication pending; local amd64/arm64 source image verified, registry publication intentionally not offered. |
 | `@webobsidian/sync-core` | 0.1.x | 1.0 | Platform-neutral ESM | npm publication pending. |
 

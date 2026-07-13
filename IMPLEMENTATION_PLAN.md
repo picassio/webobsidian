@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin prerelease public; npm, real platform matrices, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.4 and full Linux native lifecycle matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -520,8 +520,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       excludes (không override `.obsidian/.git/.trash`), fallback poll, mobile confirm ≥100MiB; raw token
       không vào `data.json` hay vault.
 - [x] M36.4 Local engine: durable cursor + apply intents + pending offline queue, per-path modify debounce,
-      create/rename/delete/subtree resume, binary chunk batches, idempotent push, ordered pull/ack; không advance
-      cursor khi local apply còn uncertain.
+      globally serialized mutation preparation (uploads cannot overtake client sequence), automatic offline cold-start
+      retry, create/rename/delete/subtree resume, binary chunk batches, idempotent push, ordered pull/ack; không
+      advance cursor khi local apply còn uncertain.
 - [x] M36.5 Remote apply echo suppression theo expected `(path,hash,revision)`; không dùng timing flag;
       handle Obsidian event burst, case-only rename, Unicode normalization và file đang mở.
 - [x] M36.6 Plugin UX: status bar, Notice/commands Sync now/Pause/Status/Conflicts/Reconnect/Reset state,
@@ -529,7 +530,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy.
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.4 bytes complete the Linux matrix:
+      concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
+      exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
       attach `main.js`, `manifest.json`, optional `styles.css`; private alpha + public beta.
 - [ ] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
@@ -603,6 +606,19 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Native plugin ordering repair + exact 0.1.4 Linux lifecycle matrix): real Obsidian 1.12.7 exposed
+  a release-blocking race absent from the mock suite: a slower Markdown upload reserved client sequence 2 while a
+  later binary operation reached the server as sequence 3, permanently rejecting sequence 2 as reused. Plugin
+  0.1.4 serializes all pending-path preparation, revalidates stale timers, and reserves sequence/idempotency only
+  after an upload succeeds. A concurrency regression blocks the second upload while the first is unresolved.
+  Startup/manual sync now remains loaded with explicit Offline status, redacted error, durable pending paths, and
+  scheduled retry when the server is unavailable; successful recovery clears the stale error. Exact release bytes
+  (`main.js` SHA-256 `fc64bd36…4e2`) ran the copied-vault matrix: simultaneous Markdown/binary create, modify,
+  identity-preserving rename, attachment delete, outage plus hard restart, server-offline cold start plus automatic
+  recovery, and concurrent 2 MiB/1-byte uploads. Local/server hashes matched; cursor/journal ended gaplessly at 12
+  with zero conflicts/queue/pending/apply intents. Screenshot and full results are in `docs/sync/evidence/`.
+  Plugin source/tag `a582605`/0.1.4; release CI 29244294191 and Node 20/22/24 CI 29244292517 passed. Linux M36.8
+  evidence is complete; unavailable Windows/macOS/mobile, independent beta, npm, and Community gates remain open.
 - 2026-07-13 (Explicit stable-acceptance audit map): added `docs/sync/ACCEPTANCE_EVIDENCE.md` as the durable
   FR-13 completion ledger. It maps every PRD DoD 8–14 row and phase 31–40 to current source/tests/CI/releases/
   screenshots, distinguishes PASS from PARTIAL/BLOCKED without scope waivers, records the source-build-only image
