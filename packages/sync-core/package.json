@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/picassio/webobsidian.git",
+    "url": "git+https://github.com/picassio/webobsidian.git",
     "directory": "packages/sync-core"
   },
   "homepage": "https://github.com/picassio/webobsidian/tree/main/packages/sync-core#readme",

@@ -27,5 +27,5 @@
   },
   "engines": { "node": ">=20" },
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/picassio/webobsidian.git", "directory": "clients/headless" }
+  "repository": { "type": "git", "url": "git+https://github.com/picassio/webobsidian.git", "directory": "clients/headless" }
 }
