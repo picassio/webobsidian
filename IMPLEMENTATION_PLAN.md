@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.5 and full Linux native lifecycle matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.6 and full Linux native lifecycle/editor-safety matrix public; npm, remaining real platforms, alpha/beta/stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
 
 ---
 
@@ -525,13 +525,15 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       ordered pull/ack; không
       advance cursor khi local apply còn uncertain.
 - [x] M36.5 Remote apply echo suppression theo expected `(path,hash,revision)`; không dùng timing flag;
-      handle Obsidian event burst, case-only rename, Unicode normalization và file đang mở.
+      handle Obsidian event burst, case-only rename, Unicode normalization và file đang mở. Remote write/rename/
+      delete bị defer khi path/subtree có pending/queued local work hoặc editor buffer khác disk; startup đợi
+      workspace layout restore để apply-intent recovery nhìn thấy open editors; overlap tạo exact conflict copy.
 - [x] M36.6 Plugin UX: status bar, Notice/commands Sync now/Pause/Status/Conflicts/Reconnect/Reset state,
       conflict view/resolve và redacted diagnostics export.
 - [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
       rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
 - [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
-      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.5 bytes complete the Linux matrix:
+      Android/iOS; no Node/Electron API để qua mobile policy. Exact public 0.1.6 bytes complete the Linux matrix:
       concurrent Markdown/binary, modify/rename/delete, outage/hard restart, offline cold start/automatic retry,
       exact hashes, and gapless journal; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
@@ -607,6 +609,21 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Unsaved open-editor overwrite repaired + exact plugin 0.1.6): direct M36.5 validation against real
+  Obsidian 1.12.7 disproved the completed “file đang mở” claim in 0.1.5. With `Open.md` dirty only in CodeMirror,
+  a racing web revision was applied through `Vault.modifyBinary` within 150 ms; Obsidian replaced the unsaved
+  editor buffer, then the pending marker hashed remote bytes and silently discarded local text. The adapter now
+  defers remote file replacement/rename/delete when an affected path/subtree has durable pending/queued work or
+  when any open Markdown editor differs from disk. Paused clients also defer remote apply. Initial paired startup
+  waits for workspace layout restoration, and concurrent start/reconnect requests share one initialization, so
+  restored editors are visible before apply-intent recovery. Mock regressions prove pending-path and pre-Vault-event
+  dirty-editor protection. In the exact 0.1.6 drill, local `local protected 0.1.6` survived while the remote event
+  remained an apply intent/cursor 5; after normal autosave, the stale operation became a durable conflict copy and
+  catch-up converged at cursor 7. Canonical held `remote 0.1.6`; both local/server conflict-copy hashes were
+  `04d264a7…6cf`; queue/pending/apply intents were zero. A pause drill held cursor/disk unchanged until resume.
+  Public source/tag `2ba5b03`/0.1.6; release CI 29246318823 and Node 20/22/24 CI 29246317400 passed; public
+  `main.js` SHA-256 is `9a498bb9…41f2`. Linux M36.5 evidence is now real rather than inferred; other platform,
+  npm, independent beta, Community, and stable gates remain open.
 - 2026-07-13 (Foreground outage retry + Community-guideline preflight + plugin 0.1.5): follow-up review found
   that startup/manual sync failures armed a retry, but a normal foreground Vault event whose upload failed only
   retained its durable marker and displayed a Notice. The local queue now reports runtime failures to the plugin,

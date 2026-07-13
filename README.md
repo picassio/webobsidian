@@ -310,7 +310,7 @@ See [PRD.md §2](PRD.md) for the full design.
   undergoing stable-release validation. Git is backup/version history only while Central Sync is enabled.
 - 🧩 The mobile-compatible native plugin source is public at
   [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync); the downloadable
-  [0.1.5 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.5) is not yet accepted
+  [0.1.6 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.6) is not yet accepted
   in Community Plugins. `web-vault-sync` is implemented/tested as a non-root daemon and reproducible local
   amd64/arm64 image; npm publication remains credential-gated and registry images are intentionally not published.
   See the [roadmap](docs/SYNC_ROADMAP.md), [compatibility matrix](docs/sync/COMPATIBILITY.md),

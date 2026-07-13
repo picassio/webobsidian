@@ -1,5 +1,27 @@
 # Validation evidence
 
+## `obsidian-linux-1.12.7-plugin-0.1.6-release.png`
+
+The open-editor safety candidate loaded in real Obsidian Linux 1.12.7 is byte-identical to public
+`central-vault-sync` 0.1.6: SHA-256 `9a498bb9…41f2` (`main.js`), `66330b11…849a` (`manifest.json`), and
+`4759b965…b4d` (`styles.css`). The screenshot shows version 0.1.6 enabled and synchronized after the conflict drill.
+
+A baseline note was opened in Obsidian's Markdown editor. Its editor buffer was changed to
+`local protected 0.1.6` and, before Obsidian persisted that buffer, a web writer committed overlapping
+`remote 0.1.6` at the observed base revision. Release 0.1.5 reproduced a critical defect in this exact race: remote
+Vault application replaced the editor buffer within 150 ms and the pending marker then hashed the remote bytes,
+silently losing the local text. The 0.1.6 adapter instead checks durable pending/queued work and every affected
+open Markdown editor against disk before remote replacement, rename, or deletion. Startup synchronization also
+waits for workspace layout restoration so those editors are visible during apply-intent recovery.
+
+In the repeated exact-byte drill, the remote event remained as a durable apply intent at cursor 5 while the editor
+still contained the local text and disk retained the prior canonical bytes. Obsidian then persisted the local edit;
+the normal stale-base operation produced a server conflict-copy event. Catch-up converged at cursor 7 with zero
+pending operations/apply intents: canonical `Open.md` contained `remote 0.1.6`, while the local and server conflict
+copy both contained `local protected 0.1.6` with SHA-256 `04d264a7…6cf`. A separate pause drill proved the cursor
+and disk remain unchanged while paused and apply exactly after resume. This closes the Linux evidence behind the
+M36.5 “file đang mở” claim; unavailable platforms and Community acceptance remain open.
+
 ## `obsidian-linux-1.12.7-plugin-0.1.5-release.png`
 
 The final runtime-outage candidate loaded in the same real Obsidian Linux 1.12.7 matrix is byte-identical to public
