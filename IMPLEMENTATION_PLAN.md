@@ -596,6 +596,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (External beta feedback channel): opened public plugin issue
+  https://github.com/picassio/central-vault-sync/issues/1 with copied/backed-up-vault warning, Windows/macOS/Linux/
+  Android/iOS matrix, pair/catch-up/resume/offline/restart/rename/delete/attachment/conflict checklist, redacted
+  diagnostic template, and explicit secret/content prohibition. Plugin README corrected stale 0.1.0 preview text
+  to 0.1.2 and links the checklist; full plugin check passed and docs commit `ddd2aa8` is public. M40.2/M40.3
+  remain open until independent tester feedback and unavailable platform evidence actually arrive.
 - 2026-07-13 (Exact plugin 0.1.2 release-asset acceptance): downloaded all three public GitHub assets and verified
   SHA-256 against release API (`main.js` `4d005b29...`, manifest `bd109090...`, styles `4759b965...`). Installed
   those exact bytes—not a local build—into a fresh isolated stable Obsidian Linux 1.12.7 vault. The app identified
