@@ -513,6 +513,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       `obsidian`, README/LICENSE/versions/privacy/network behavior; desktop+mobile (`isDesktopOnly:false`).
 - [~] M36.2 Publish/version public `@webobsidian/sync-core` package + protocol conformance fixtures; plugin
       adapter dùng Obsidian Vault text/binary API, `requestUrl`, one-use-ticket WebSocket và lifecycle registerEvent.
+      npm authentication now identifies `picassio`, but first publication returns `E404 Scope not found` until the
+      owner creates/authorizes the `@webobsidian` npm organization/scope; headless publication is held to avoid a
+      public package with an unavailable exact dependency.
 - [x] M36.3 Pair/settings: server URL test, SecretStorage token, device name, pair/unpair, stricter client
       excludes (không override `.obsidian/.git/.trash`), fallback poll, mobile confirm ≥100MiB; raw token
       không vào `data.json` hay vault.
@@ -600,6 +603,14 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (npm publication preflight + exact scope blocker): npm authentication now succeeds as `picassio`.
+  Both packages pass clean public dry-run with no metadata auto-correction after normalizing repository URLs;
+  core tarball SHA-1 `d8710e09...`/SHA-512 `3bFmgg...`, headless `f93d692e...`/`LIIBYA...`. Commit `3d27b5a`
+  passed CI run 29240963980 with all 126 tests and the full dual-E2E/docs/API/audit/systemd/multi-arch matrix.
+  Actual core 0.1.2 publication reached npm but returned `E404 Scope not found`; the user-owned `@webobsidian`
+  organization/scope has not been created or authorized. Headless was deliberately not published because its exact
+  core dependency would be unavailable. Required external action: create/authorize the npm scope, then retry core
+  first; credentials/tokens must not be shared in chat.
 - 2026-07-13 (Installed headless upgrade + CLI failure-path repair): a real isolated global-prefix drill installed
   packed commit `4d45e88` (`sync-core` 0.1.1 + pre-marker `web-vault-sync`), paired/synced revision 1, replaced it
   with current packed core 0.1.2/headless bytes, then proved unchanged credential/device/cursor/vault, additive
