@@ -35,3 +35,11 @@ npx @redocly/cli lint docs/sync/openapi-v1.yaml
 
 Do not edit `protocol-v1.schema.json` by hand. A protocol change must update runtime schemas, fixtures,
 OpenAPI, roadmap/PRD when semantics change, and compatibility tests in the same change.
+
+## Stable publication gate
+
+Before pushing a stable `vX.Y.Z` tag, configure an npm publication token as the repository Actions secret
+`NPM_TOKEN` and set the root, sync-core, and headless package versions to exactly `X.Y.Z`. The stable workflow
+fails closed when the credential or version alignment is missing, runs both browser and two-headless-client E2E,
+publishes both npm packages with provenance, and only then creates the immutable GitHub release. It does not
+publish container images; operators clone the verified source tag and build the Dockerfiles locally.

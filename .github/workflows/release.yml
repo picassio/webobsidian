@@ -19,10 +19,15 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+      - name: Require npm publication credential
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: test -n "$NODE_AUTH_TOKEN"
       - run: npm ci
       - run: npm run typecheck && npm test && npm run lint:sync-api && npm audit --audit-level=low && npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:browser
+      - run: npm run test:e2e:headless
       - name: Verify tag equals all publishable package versions
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -44,10 +49,8 @@ jobs:
         with:
           subject-path: release/*
       - name: Publish npm packages
-        if: ${{ env.NPM_TOKEN != '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm publish --workspace @webobsidian/sync-core --access public --provenance
           npm publish --workspace web-vault-sync --access public --provenance

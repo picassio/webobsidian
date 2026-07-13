@@ -598,6 +598,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Stable workflow fail-closed publication): audit found the tag workflow could succeed and create
+  a GitHub stable release while silently skipping npm publication when `NPM_TOKEN` was absent. Publication is now
+  mandatory: the workflow fails before build without the secret, runs both browser and two-headless-client E2E,
+  requires tag/root/core/headless version equality, publishes both npm packages with provenance, and creates the
+  GitHub release only afterward. `docs/sync/README.md` records the operator prerequisite and source-build-only
+  container policy. No stable tag was created and the currently absent repository secret remains an explicit gate.
 - 2026-07-13 (Two-headless-client merge/conflict drill): paired two independent Linux CLI profiles to a fresh
   production server and verified create/catch-up, clean stale diff3 convergence, overlapping stale-write conflict
   preservation, exit code 4/listing, contiguous sequences 1–5, and distinct device actors. The first drill exposed
