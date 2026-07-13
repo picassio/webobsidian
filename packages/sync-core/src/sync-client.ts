@@ -32,6 +32,7 @@ export interface SyncLocalAdapter {
   apply(event: SyncEvent): Promise<void>;
   recover(intent: ClientApplyIntent): Promise<void>;
   bootstrap(entries: SyncEntry[]): Promise<void>;
+  committed?(operation: SyncOperation, result: OperationResult): Promise<void>;
   conflict(result: OperationResult): Promise<void>;
 }
 export interface SyncClientScheduler {
@@ -133,6 +134,7 @@ export class OrderedSyncClient {
       const [result] = await this.transport.operations([operation]);
       if (!result) throw new Error('operation result missing');
       if (result.status === 'accepted' || result.status === 'merged') {
+        await this.adapter.committed?.(operation, result);
         await this.persistence.removeOperation(operation.idempotencyKey);
       } else if (result.status === 'conflict') {
         await this.adapter.conflict(result);

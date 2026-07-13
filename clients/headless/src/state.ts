@@ -28,6 +28,7 @@ export interface HeadlessState {
   applyIntents: ClientApplyIntent[];
   entries: SyncEntry[];
   pendingPaths: PendingPath[];
+  mergedSources: Record<string, string>;
   lastError: string | null;
   lastSyncAt: string | null;
 }
@@ -59,7 +60,7 @@ export class HeadlessStore implements SyncClientPersistence {
       schemaVersion: 1, serverUrl: input.serverUrl, vaultPath: path.resolve(input.vaultPath),
       deviceId: null, deviceName: input.deviceName ?? os.hostname(), vaultId: null,
       cursor: 0, nextClientSequence: 1, mode: input.mode ?? 'bidirectional', pollSeconds: 15,
-      excludeGlobs: [], operations: [], applyIntents: [], entries: [], pendingPaths: [],
+      excludeGlobs: [], operations: [], applyIntents: [], entries: [], pendingPaths: [], mergedSources: {},
       lastError: null, lastSyncAt: null,
     };
     await fs.mkdir(this.state.vaultPath, { recursive: true });
@@ -142,12 +143,17 @@ export class HeadlessStore implements SyncClientPersistence {
   async replaceEntries(entries: SyncEntry[]) { await this.update((state) => { state.entries = entries; }); }
   async queuePath(pending: PendingPath) { await this.update((state) => { state.pendingPaths = [...state.pendingPaths.filter((item) => item.path !== pending.path), pending]; }); }
   async removePendingPath(filePath: string) { await this.update((state) => { state.pendingPaths = state.pendingPaths.filter((item) => item.path !== filePath); }); }
+  mergedSource(filePath: string) { return this.state.mergedSources[filePath]; }
+  async putMergedSource(filePath: string, hash: string) { await this.update((state) => { state.mergedSources[filePath] = hash; }); }
+  async removeMergedSource(filePath: string) { await this.update((state) => { delete state.mergedSources[filePath]; }); }
 
   private async read(): Promise<HeadlessState | null> {
     try {
       const envelope = JSON.parse(await fs.readFile(this.stateFile, 'utf8')) as Envelope;
       if (envelope.envelopeVersion !== 1 || envelope.checksum !== sha256Text(canonical(envelope.payload))) throw new Error('state checksum mismatch');
       if (envelope.payload.schemaVersion !== 1) throw new Error('unsupported state schema');
+      // Additive schema-v1 migration: old states predate crash-safe clean-merge source markers.
+      envelope.payload.mergedSources ??= {};
       return envelope.payload;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;

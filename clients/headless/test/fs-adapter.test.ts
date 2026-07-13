@@ -32,6 +32,32 @@ test('filesystem adapter streams verified remote bytes and quarantines unsubmitt
   assert.match(conflicts[0] ?? '', /quarantined/);
 });
 
+test('clean server merge replaces the submitted local source without false quarantine', async (t) => {
+  const { store, vault } = await fixture(t); let remote = 'one base\nseparator\nthree base\n'; const conflicts: string[] = [];
+  const adapter = new FilesystemAdapter(store, { async download() { return new Response(remote); } } as never, (result) => conflicts.push(String(result)));
+  await adapter.initialize(); await adapter.bootstrap([entry(remote)]);
+  const submitted = 'one base\nseparator\nthree local\n';
+  await fs.writeFile(path.join(vault, 'Notes/A.md'), submitted);
+  remote = 'one remote\nseparator\nthree local\n';
+  await adapter.committed({
+    operation: 'modify', entryId: 'entry_headless_adapter_1', baseRevision: 1,
+    clientSequence: 1, idempotencyKey: 'headless-merge-operation-1',
+    content: { hash: sha256Text(submitted), size: Buffer.byteLength(submitted), inlineText: submitted },
+  }, {
+    idempotencyKey: 'headless-merge-operation-1', status: 'merged', eventId: 'event_headless_adapter_2',
+    sequence: 2, entryId: 'entry_headless_adapter_1', revision: 2, hash: sha256Text(remote), path: 'Notes/A.md',
+  });
+  assert.equal(store.mergedSource('Notes/A.md'), sha256Text(submitted));
+  const restartedStore = new HeadlessStore(store.configDir); await restartedStore.load();
+  const restartedAdapter = new FilesystemAdapter(restartedStore, { async download() { return new Response(remote); } } as never, (result) => conflicts.push(String(result)));
+  await restartedAdapter.initialize();
+  await restartedAdapter.apply({ sequence: 2, eventId: 'event_headless_adapter_2', actor: { type: 'device', id: 'device_local_headless' }, operation: 'modify', entryId: 'entry_headless_adapter_1', path: 'Notes/A.md', baseRevision: 1, revision: 2, hash: sha256Text(remote), previousHash: sha256Text('one base\nseparator\nthree base\n'), size: Buffer.byteLength(remote), occurredAt: '2026-07-13T00:00:01.000Z' });
+  assert.equal(restartedStore.mergedSource('Notes/A.md'), undefined);
+  assert.equal(await fs.readFile(path.join(vault, 'Notes/A.md'), 'utf8'), remote);
+  await assert.rejects(() => fs.access(path.join(vault, '.web-vault-sync-quarantine')));
+  assert.deepEqual(conflicts, []);
+});
+
 test('hash mismatch and symlink paths fail before canonical write', async (t) => {
   const { store, vault } = await fixture(t);
   const adapter = new FilesystemAdapter(store, { async download() { return new Response('tampered'); } } as never, () => {});

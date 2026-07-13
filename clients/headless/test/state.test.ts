@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { sha256Text } from '@webobsidian/sync-core';
 import { HeadlessStore } from '../src/state.js';
 
 test('headless state is checksummed, atomic, mode 0600, outside vault, and token is separate', async (t) => {
@@ -18,7 +19,13 @@ test('headless state is checksummed, atomic, mode 0600, outside vault, and token
   assert.equal(await store.takeClientSequence(), 1); await store.putCursor(8);
   const reloaded = new HeadlessStore(config); await reloaded.load();
   assert.equal(reloaded.state.cursor, 8); assert.equal(reloaded.state.nextClientSequence, 2);
-  const envelope = JSON.parse(await fs.readFile(store.stateFile, 'utf8')); envelope.payload.cursor = 9;
+  const envelope = JSON.parse(await fs.readFile(store.stateFile, 'utf8'));
+  delete envelope.payload.mergedSources;
+  envelope.checksum = sha256Text(canonical(envelope.payload));
+  await fs.writeFile(store.stateFile, JSON.stringify(envelope));
+  const migrated = new HeadlessStore(config); await migrated.load();
+  assert.deepEqual(migrated.state.mergedSources, {});
+  envelope.payload.cursor = 9;
   await fs.writeFile(store.stateFile, JSON.stringify(envelope));
   await assert.rejects(() => new HeadlessStore(config).load(), /checksum/);
 });
@@ -33,3 +40,9 @@ test('token permission widening fails closed and config inside vault is rejected
   const unsafe = new HeadlessStore(path.join(root, 'unsafe-vault', '.state'));
   await assert.rejects(() => unsafe.initialize({ serverUrl: 'http://localhost:3000', vaultPath: path.join(root, 'unsafe-vault') }), /outside the vault/);
 });
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  return JSON.stringify(value);
+}

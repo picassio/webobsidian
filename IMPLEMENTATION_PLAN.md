@@ -548,9 +548,11 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       credentials, network-online, restart policy + CLI doctor (không claim sd_notify watchdog v1);
       test reboot/network outage/permission failure.
 - [x] M37.7 Sidecar Docker image non-root: bind vault + state, read-only secret, healthcheck, graceful stop;
-      publish amd64/arm64; compose/Kubernetes examples.
+      verified local source builds for amd64/arm64 (no registry publication); compose/Kubernetes examples.
 - [~] M37.8 Headless E2E Linux/macOS + amd64/arm64: two daemon clients, browser/plugin interop,
-      offline/restart/crash, large binary bounded memory; npm package/signing/SBOM release.
+      offline/restart/crash, large binary bounded memory; npm package/signing/SBOM release. Linux two-client
+      create/catch-up, clean stale diff3 merge, overlapping-edit conflict copy, convergence, and contiguous
+      two-device journal were exercised against the production build; macOS and npm publication remain external.
 
 ## Phase 38 — Git transition: backup/version history, không live sync — FR-4/FR-13
 - [x] M38.1 Rename Settings/Ribbon/status/docs từ “GitHub Sync” thành “Git Backup & Version History” khi
@@ -596,6 +598,16 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Two-headless-client merge/conflict drill): paired two independent Linux CLI profiles to a fresh
+  production server and verified create/catch-up, clean stale diff3 convergence, overlapping stale-write conflict
+  preservation, exit code 4/listing, contiguous sequences 1–5, and distinct device actors. The first drill exposed
+  a false quarantine when applying the server result of a clean merge: the submitted local bytes legitimately
+  differed from both the prior and merged hashes. Sync core 0.1.2 now notifies adapters of committed operations;
+  the filesystem adapter durably records only the exact submitted merge source before queue removal (surviving a
+  crash/restart), replaces it with canonical merged bytes, and still quarantines unrelated drift. Regression tests
+  and the repeated real drill prove zero conflict/quarantine
+  for clean merge and durable conflict behavior for overlap. Core 14/14, headless 11/11, full typecheck/build/audit
+  pass; packed core 0.1.2 plus headless artifacts also clean-install together without workspace links.
 - 2026-07-13 (systemd lifecycle claim correction): audit found shipped `ExecReload=SIGHUP` although the CLI only
   handles SIGTERM/SIGINT; SIGHUP would terminate/restart rather than reload configuration. Removed the unsupported
   directive and documented `systemctl restart` after changes. Added a regression test binding unit claims to the

@@ -1,6 +1,6 @@
 {
   "name": "@webobsidian/sync-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Platform-neutral contracts and crash-safe ordered client state machine for WebObsidian Sync Protocol 1.0",
   "license": "MIT",
   "repository": {

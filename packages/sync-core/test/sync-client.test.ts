@@ -27,15 +27,18 @@ test('ordered client publishes durable offline work before pulling remote bytes'
   const transport: SyncClientTransport = {
     async handshake() { return { vaultId: 'vault_core_client_1', latestSequence: 6, minimumRetainedSequence: 1, readOnly: false }; },
     async manifest() { return { entries: [], snapshotSequence: 5 }; },
-    async operations(operations) { order.push('push'); return [{ idempotencyKey: operations[0]!.idempotencyKey, status: 'accepted', sequence: 6 }]; },
+    async operations(operations) { order.push('push'); return [{ idempotencyKey: operations[0]!.idempotencyKey, status: 'merged', sequence: 6 }]; },
     async changes(after) { order.push('pull'); return { events: [], nextAfter: after, hasMore: false, latestSequence: 6 }; },
     async acknowledge(sequence) { order.push(`ack:${sequence}`); },
     async connectWake() { return () => {}; },
   };
-  const adapter: SyncLocalAdapter = { async apply() {}, async recover() {}, async bootstrap() {}, async conflict() {} };
+  const adapter: SyncLocalAdapter = {
+    async apply() {}, async recover() {}, async bootstrap() {}, async conflict() {},
+    async committed(operation, result) { order.push(`committed:${operation.idempotencyKey}:${result.status}`); },
+  };
   const engine = new OrderedSyncClient(persistence, transport, adapter, () => {});
   await engine.start(); engine.stop();
-  assert.deepEqual(order, ['push', 'pull', 'ack:5']);
+  assert.deepEqual(order, ['push', 'committed:core-client-operation-1:merged', 'pull', 'ack:5']);
   assert.deepEqual(persistence.queued, []);
 });
 

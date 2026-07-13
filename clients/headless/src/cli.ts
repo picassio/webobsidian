@@ -57,7 +57,7 @@ async function pair(): Promise<void> {
   await store.setToken(result.token);
   await store.update((state) => {
     state.deviceId = result.deviceId; state.vaultId = result.vaultId; state.cursor = 0; state.nextClientSequence = 1;
-    state.operations = []; state.applyIntents = []; state.entries = []; state.pendingPaths = []; state.lastError = null;
+    state.operations = []; state.applyIntents = []; state.entries = []; state.pendingPaths = []; state.mergedSources = {}; state.lastError = null;
   });
   print({ ok: true, deviceId: result.deviceId, vaultId: result.vaultId });
 }
@@ -125,7 +125,7 @@ async function doctor(): Promise<void> {
 }
 async function reset(): Promise<void> {
   if (!has('--yes')) throw new UsageError('reset keeps vault files but requires --yes');
-  await store.update((state) => { state.cursor = 0; state.nextClientSequence = 1; state.operations = []; state.applyIntents = []; state.entries = []; state.pendingPaths = []; state.lastError = null; });
+  await store.update((state) => { state.cursor = 0; state.nextClientSequence = 1; state.operations = []; state.applyIntents = []; state.entries = []; state.pendingPaths = []; state.mergedSources = {}; state.lastError = null; });
   print({ ok: true, message: 'local sync metadata reset; vault files retained' });
 }
 async function withMode(mode: SyncMode, action: () => Promise<void>): Promise<void> {

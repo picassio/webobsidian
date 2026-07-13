@@ -13,6 +13,7 @@ import {
   type SyncEntry,
   type SyncEvent,
   type SyncLocalAdapter,
+  type SyncOperation,
 } from '@webobsidian/sync-core';
 import { HeadlessStore } from './state.js';
 import { NodeSyncTransport } from './transport.js';
@@ -59,6 +60,11 @@ export class FilesystemAdapter implements SyncLocalAdapter {
     });
   }
   async recover(intent: ClientApplyIntent): Promise<void> { await this.apply(intent.event); }
+  async committed(operation: SyncOperation, result: OperationResult): Promise<void> {
+    if (result.status === 'merged' && 'content' in operation && operation.content && result.path) {
+      await this.store.putMergedSource(result.path, operation.content.hash);
+    }
+  }
   async conflict(result: OperationResult): Promise<void> { this.onConflict(result); }
 
   async consumeExpected(filePath: string, hash: string | null): Promise<boolean> {
@@ -109,9 +115,14 @@ export class FilesystemAdapter implements SyncLocalAdapter {
     if (entry.kind === 'directory') { await fs.mkdir(absolute, { recursive: true }); this.expected.set(entry.path, { hash: null, revision: entry.revision }); return; }
     if (!entry.hash) throw new Error(`file has no hash: ${entry.path}`);
     const current = await this.currentHash(entry.path);
-    if (current === entry.hash) { this.expected.set(entry.path, { hash: entry.hash, revision: entry.revision }); return; }
+    const submittedMergeSource = this.store.mergedSource(entry.path);
+    if (current === entry.hash) {
+      this.expected.set(entry.path, { hash: entry.hash, revision: entry.revision });
+      if (submittedMergeSource) await this.store.removeMergedSource(entry.path);
+      return;
+    }
     const prior = this.store.entryByPath(entry.path);
-    if (current && prior?.hash && current !== prior.hash) await this.quarantine(entry.path);
+    if (current && prior?.hash && current !== prior.hash && current !== submittedMergeSource) await this.quarantine(entry.path);
     await fs.mkdir(path.dirname(absolute), { recursive: true });
     const temporary = `${absolute}.sync-${process.pid}-${Date.now()}`;
     const response = await this.transport.download(entry.entryId, entry.revision);
@@ -126,6 +137,7 @@ export class FilesystemAdapter implements SyncLocalAdapter {
       const handle = await fs.open(temporary, 'r'); try { await handle.sync(); } finally { await handle.close(); }
       this.expected.set(entry.path, { hash: entry.hash, revision: entry.revision });
       await fs.rename(temporary, absolute); await syncDirectory(path.dirname(absolute));
+      if (submittedMergeSource) await this.store.removeMergedSource(entry.path);
     } catch (error) { await fs.rm(temporary, { force: true }); throw error; }
   }
   private async rename(from: string, to: string, hash: string | null, revision: number): Promise<void> {
