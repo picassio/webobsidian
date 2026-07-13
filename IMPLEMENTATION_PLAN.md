@@ -596,6 +596,12 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
 ### Nhật ký tiến độ
+- 2026-07-13 (Clean npm artifact install): packed current `@webobsidian/sync-core` 0.1.1 and
+  `web-vault-sync` 0.1.0, then installed only those two tarballs into a fresh directory with no workspace links.
+  The installed ESM core imports and reports Protocol 1.0; the package-local `web-vault-sync` bin runs `help`,
+  exposes the full command set, and the clean dependency tree audits at zero vulnerabilities. This proves package
+  contents/resolution/bin wiring; M36.2/M40.5 remain partial solely for registry authentication/publication and
+  subsequent registry-origin clean install (`npm whoami` still 401).
 - 2026-07-13 (Plugin settings review hardening + 0.1.3): removed the final four Obsidian lint warnings without
   raising the 1.11.4 minimum. `CentralSyncSettingTab` now has one canonical settings-definition source: Obsidian
   1.13+ receives searchable declarative settings, while 1.11–1.12 renders those same definitions through a narrow
