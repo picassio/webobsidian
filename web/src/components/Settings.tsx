@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import Icon from './Icon';
+import { IndexedDbSyncPersistence } from '../lib/sync-db';
 
-type Section = 'vault' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
+type Section = 'vault' | 'sync' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
 export default function Settings() {
   const open = useStore((s) => s.settingsOpen);
@@ -22,7 +23,7 @@ export default function Settings() {
       <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-layout">
           <div className="settings-nav">
-            {(['vault', 'git', 'api', 'sharing', 'plugins', 'appearance', 'account', 'about'] as Section[]).map((s) => (
+            {(['vault', 'sync', 'git', 'api', 'sharing', 'plugins', 'appearance', 'account', 'about'] as Section[]).map((s) => (
               <button key={s} className={section === s ? 'active' : ''} onClick={() => setSection(s)}>
                 {labels[s]}
               </button>
@@ -30,6 +31,7 @@ export default function Settings() {
           </div>
           <div className="settings-content">
             {settings && section === 'vault' && <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
+            {section === 'sync' && <SyncSettings />}
             {settings && section === 'git' && <GitSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
             {section === 'api' && <ApiKeys />}
             {section === 'sharing' && <Shares />}
@@ -46,7 +48,8 @@ export default function Settings() {
 
 const labels: Record<Section, string> = {
   vault: 'Vault & Files',
-  git: 'GitHub Sync',
+  sync: 'Central Sync',
+  git: 'Git Backup & History',
   api: 'API Keys',
   sharing: 'Sharing',
   plugins: 'Community Plugins',
@@ -63,6 +66,183 @@ function Row({ name, desc, children }: { name: string; desc?: string; children: 
         {desc && <div className="desc">{desc}</div>}
       </div>
       <div className="control">{children}</div>
+    </div>
+  );
+}
+
+function SyncSettings() {
+  const [health, setHealth] = useState<any>(null);
+  const [doctor, setDoctor] = useState<any>(null);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [localDevice, setLocalDevice] = useState<any>(null);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [selected, setSelected] = useState<{ conflict: any; base: string | null; server: string; client: string; binary: boolean } | null>(null);
+  const [merged, setMerged] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const persistence = useRef(new IndexedDbSyncPersistence()).current;
+  const refresh = async () => {
+    const [nextHealth, nextDevices, local] = await Promise.all([
+      api.syncHealth(), api.syncDevices(), persistence.getDevice(),
+    ]);
+    setHealth(nextHealth);
+    setDevices(nextDevices.devices);
+    setLocalDevice(local);
+    setConflicts(local ? (await api.syncConflicts()).conflicts.filter((item) => item.status === 'unresolved') : []);
+  };
+  useEffect(() => { void refresh().catch((e) => setError(e instanceof Error ? e.message : 'Unable to load sync status')); }, []);
+  const runDoctor = async () => {
+    setBusy(true); setError('');
+    try { setDoctor(await api.syncDoctor()); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Diagnostics failed'); }
+    finally { setBusy(false); }
+  };
+  const pair = async () => {
+    setBusy(true); setError('');
+    try {
+      const deviceName = `Web browser · ${navigator.platform || 'Unknown platform'}`;
+      const deviceId = `web_${crypto.randomUUID().replaceAll('-', '')}`;
+      const paired = await api.createBrowserSyncDevice(deviceId, deviceName);
+      await persistence.putDevice({
+        deviceId: paired.deviceId, deviceName,
+        vaultId: paired.vaultId, cursor: 0, nextClientSequence: 1,
+      });
+      await refresh();
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Pairing failed');
+    } finally { setBusy(false); }
+  };
+  const inspectConflict = async (conflict: any) => {
+    setBusy(true); setError('');
+    try {
+      const binary = !/\.(md|markdown|txt|json|css|js|ts|tsx|jsx|html|xml|yaml|yml|csv|svg)$/i.test(conflict.path);
+      if (binary) {
+        setSelected({ conflict, base: null, server: '', client: '', binary: true });
+        setMerged('');
+      } else {
+        const [base, server, client] = await Promise.all([
+          conflict.entryId && conflict.baseRevision !== null
+            ? api.syncRevisionText(conflict.entryId, conflict.baseRevision).catch(() => null)
+            : Promise.resolve(null),
+          api.read(conflict.path).then((value) => typeof value === 'string' ? value : value.content).catch(() => ''),
+          conflict.conflictPath ? api.read(conflict.conflictPath).then((value) => typeof value === 'string' ? value : value.content).catch(() => '') : Promise.resolve(''),
+        ]);
+        setSelected({ conflict, base, server, client, binary: false });
+        setMerged(client || server);
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to inspect conflict'); }
+    finally { setBusy(false); }
+  };
+  const resolveConflict = async (resolution: 'keep-server' | 'keep-client' | 'merged' | 'copy') => {
+    if (!localDevice || !selected) return;
+    setBusy(true); setError('');
+    try {
+      const sequence = await persistence.takeClientSequence();
+      await api.resolveSyncConflict(selected.conflict.conflictId, resolution, sequence, resolution === 'merged' ? merged : undefined);
+      setSelected(null); setMerged(''); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Conflict resolution failed'); }
+    finally { setBusy(false); }
+  };
+  const revoke = async (deviceId: string) => {
+    if (!confirm('Revoke this device? It will stop receiving and sending vault changes immediately.')) return;
+    setBusy(true); setError('');
+    try {
+      await api.revokeSyncDevice(deviceId);
+      if (localDevice?.deviceId === deviceId) {
+        await api.clearBrowserSyncDevice();
+        await persistence.clearDevice();
+        window.location.reload();
+        return;
+      }
+      await refresh();
+    }
+    catch (e) { setError(e instanceof Error ? e.message : 'Revocation failed'); }
+    finally { setBusy(false); }
+  };
+  const exportDiagnostics = () => {
+    const payload = JSON.stringify({
+      exportedAt: new Date().toISOString(), protocolVersion: health?.protocolVersion ?? '1.0',
+      health,
+      doctor: doctor ? { ...doctor, issues: doctor.issues?.map(({ severity, code, message, repairable, repaired }: any) => ({ severity, code, message: String(message).replace(/(?:[A-Za-z]:)?[\\/][^\s]*/g, '<redacted-path>'), repairable, repaired })) } : null,
+      devices: devices.map(({ deviceId, name, createdAt, lastSeenAt, acknowledgedSequence, revokedAt }) => ({ deviceId, name, createdAt, lastSeenAt, acknowledgedSequence, revokedAt })),
+      local: localDevice ? { deviceId: localDevice.deviceId, deviceName: localDevice.deviceName, cursor: localDevice.cursor } : null,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'webobsidian-sync-diagnostics.json'; anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  };
+  const state = health?.readOnly ? 'Read-only recovery mode' : health ? 'Server healthy' : 'Checking…';
+  return (
+    <div>
+      <h2>Central Sync</h2>
+      <p className="desc">Revision-safe synchronization for this browser and paired Obsidian or Linux clients. Git remains backup-only.</p>
+      <Row name="Server status" desc={health ? `Sequence ${health.latestSequence ?? 0} · derived-index lag ${health.indexLagSequence ?? 0}` : undefined}>
+        <span role="status" aria-live="polite">{state}</span>
+      </Row>
+      <Row name="Diagnostics" desc={`Derived-index lag ${health?.indexLagSequence ?? 0} · ${health?.reason ?? 'no recovery warning'}`}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn secondary" type="button" disabled={busy} onClick={runDoctor}>{busy ? 'Checking…' : 'Run sync doctor'}</button>
+          <button className="btn secondary" type="button" disabled={!health} onClick={exportDiagnostics}>Export redacted JSON</button>
+        </div>
+      </Row>
+      {health?.alerts?.map((alert: any) => <p key={alert.code + alert.message} role="alert" style={{ color: alert.severity === 'critical' ? 'var(--text-error)' : 'var(--text-warning)' }}>{alert.message}</p>)}
+      {doctor && <p role="status" className="desc">Doctor: {doctor.healthy ? 'healthy' : `${doctor.issues.length} issue(s)`}; checked {doctor.checkedEntries} entries and {doctor.checkedBlobs} blobs.</p>}
+      <p className="desc">Sync scope: normal vault files, attachments, and empty folders. Device workspace remains local. Excluded: <code>.obsidian/**</code>, <code>.git/**</code>, <code>.trash/**</code>, temporary/OS files, and server sync metadata.</p>
+      <Row name="This browser" desc={localDevice ? `Paired as ${localDevice.deviceName}` : 'Pair to enable durable offline queue and ordered catch-up'}>
+        <button className="btn" type="button" disabled={busy || Boolean(localDevice)} onClick={pair}>
+          {busy ? 'Working…' : localDevice ? 'Paired' : 'Pair this browser'}
+        </button>
+      </Row>
+      {error && <div role="alert" style={{ color: 'var(--text-error)', margin: '12px 0' }}>{error}</div>}
+      <h3>Conflict center {conflicts.length > 0 && `(${conflicts.length})`}</h3>
+      {conflicts.length === 0 && <p className="desc">No unresolved conflicts.</p>}
+      {conflicts.map((conflict) => (
+        <Row key={conflict.conflictId} name={conflict.path} desc={`${conflict.kind} conflict · ${new Date(conflict.createdAt).toLocaleString()}`}>
+          <button className="btn secondary" type="button" disabled={busy} onClick={() => inspectConflict(conflict)}>Compare</button>
+        </Row>
+      ))}
+      {selected && (
+        <div style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 8, padding: 12, margin: '12px 0' }}>
+          <h3 style={{ marginTop: 0 }}>Resolve {selected.conflict.path}</h3>
+          {selected.binary ? (
+            <div>
+              <p className="desc">Binary conflict. Compare metadata or download both immutable versions; binary content is never merged automatically.</p>
+              <p><strong>Server SHA-256:</strong> <code>{selected.conflict.currentHash ?? 'deleted'}</code></p>
+              <p><strong>Client SHA-256:</strong> <code>{selected.conflict.submittedHash ?? 'unavailable'}</code></p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {selected.conflict.currentHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selected.conflict.currentHash, `server-${selected.conflict.path.split('/').at(-1)}`)}>Download server</button>}
+                {selected.conflict.submittedHash && <button className="btn secondary" onClick={() => api.downloadSyncBlob(selected.conflict.submittedHash, `client-${selected.conflict.path.split('/').at(-1)}`)}>Download client</button>}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 8 }}>
+                <label>Base version<textarea className="text-input" readOnly value={selected.base ?? 'Base revision unavailable'} style={{ width: '100%', minHeight: 120 }} /></label>
+                <label>Server version<textarea className="text-input" readOnly value={selected.server} style={{ width: '100%', minHeight: 120 }} /></label>
+                <label>Client/conflict copy<textarea className="text-input" readOnly value={selected.client} style={{ width: '100%', minHeight: 120 }} /></label>
+              </div>
+              <label style={{ display: 'block', marginTop: 8 }}>Merged result<textarea className="text-input" value={merged} onChange={(event) => setMerged(event.target.value)} style={{ width: '100%', minHeight: 120 }} /></label>
+            </>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {!selected.binary && <button className="btn" disabled={busy} onClick={() => resolveConflict('merged')}>Save merged result</button>}
+            <button className="btn secondary" disabled={busy} onClick={() => resolveConflict('keep-server')}>Keep server</button>
+            <button className="btn secondary" disabled={busy} onClick={() => resolveConflict('keep-client')}>Keep client</button>
+            <button className="btn secondary" disabled={busy} onClick={() => resolveConflict('copy')}>Keep both copies</button>
+            <button className="btn secondary" disabled={busy} onClick={() => setSelected(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <h3>Paired devices</h3>
+      {devices.length === 0 && <p className="desc">No paired devices.</p>}
+      {devices.map((device) => (
+        <Row key={device.deviceId} name={device.name} desc={`Last seen ${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'never'} · cursor ${device.acknowledgedSequence ?? 0}`}>
+          <button className="btn secondary" type="button" disabled={busy || Boolean(device.revokedAt)} onClick={() => revoke(device.deviceId)}>
+            {device.revokedAt ? 'Revoked' : 'Revoke'}
+          </button>
+        </Row>
+      ))}
     </div>
   );
 }
@@ -129,6 +309,7 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
 
 function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   const [g, setG] = useState({ ...s.git });
+  const central = s.sync?.enabled === true;
   const [log, setLog] = useState<string[]>([]);
   const logRef = useRef<HTMLTextAreaElement>(null);
   const set = (k: string, v: any) => setG((p: any) => ({ ...p, [k]: v }));
@@ -143,6 +324,25 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
   const save = async () => { await api.putSettings({ git: g }); await reload(); append(['Saved git settings']); };
+  const importRemote = async () => {
+    try {
+      const preview = await api.gitImport(false);
+      append(['Remote import preview:', JSON.stringify(preview.plan, null, 2)]);
+      if (!confirm('Apply this remote snapshot through Central Sync as normal revisioned operations? Existing files are not deleted unless explicitly requested.')) return;
+      const result = await api.gitImport(true, false);
+      append([`Remote import applied: ${result.applied ?? 0} operation(s)`]); await reload();
+    } catch (e) { append([`Import error: ${e instanceof Error ? e.message : String(e)}`]); }
+  };
+  const migrate = async () => {
+    try {
+      const preview = await api.migrateGitToBackup(false);
+      const remote = preview.remoteConfigured ? 'and push it to the configured remote' : 'as a local-only commit';
+      const allowLocalOnly = !preview.remoteConfigured;
+      if (!confirm(`Create a full pre-migration backup ${remote}, disable Git pull/clone, and enable Central Sync? Remote content is never pulled automatically; cancel and use Preview/apply remote import first if the remote contains changes you need.`)) return;
+      const result = await api.migrateGitToBackup(true, allowLocalOnly);
+      append(result.backup ?? ['Migration complete']); await reload();
+    } catch (e) { append([`Migration error: ${e instanceof Error ? e.message : String(e)}`]); }
+  };
   const run = async (fn: () => Promise<any>, label: string) => {
     append([`${label}…`]);
     try {
@@ -157,8 +357,11 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
   };
   return (
     <div>
-      <h2>GitHub Sync</h2>
-      <Row name="Enable git sync"><input type="checkbox" checked={g.enabled} onChange={(e) => set('enabled', e.target.checked)} /></Row>
+      <h2>Git Backup & Version History</h2>
+      <p className="desc">{central
+        ? 'Central Sync is authoritative. Git only snapshots and pushes committed vault revisions; pull/clone cannot mutate the live vault.'
+        : 'Legacy bidirectional Git is active for this upgraded installation. Migrate before pairing Central Sync clients.'}</p>
+      <Row name="Enable Git backup"><input type="checkbox" checked={g.enabled} onChange={(e) => set('enabled', e.target.checked)} /></Row>
       <Row name="Remote URL" desc="https://github.com/owner/repo.git">
         <input className="text-input" style={{ width: 260 }} value={g.remote} onChange={(e) => set('remote', e.target.value)} />
       </Row>
@@ -168,8 +371,8 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       </Row>
       <Row name="Author name"><input className="text-input" value={g.authorName} onChange={(e) => set('authorName', e.target.value)} /></Row>
       <Row name="Author email"><input className="text-input" value={g.authorEmail} onChange={(e) => set('authorEmail', e.target.value)} /></Row>
-      <Row name="Auto-sync" desc="Periodic pull+commit+push on the interval below"><input type="checkbox" checked={g.autoSync} onChange={(e) => set('autoSync', e.target.checked)} /></Row>
-      <Row name="Auto-commit on save" desc="Commit (+push) ~5s after each edit"><input type="checkbox" checked={g.autoCommitOnSave} onChange={(e) => set('autoCommitOnSave', e.target.checked)} /></Row>
+      <Row name="Scheduled backup" desc={central ? 'Periodic commit + push; never pulls into the live vault' : 'Legacy pull + commit + push until migration'}><input type="checkbox" checked={g.autoSync} onChange={(e) => set('autoSync', e.target.checked)} /></Row>
+      <Row name="Backup after save" desc="Commit (+push) ~5s after an authoritative edit"><input type="checkbox" checked={g.autoCommitOnSave} onChange={(e) => set('autoCommitOnSave', e.target.checked)} /></Row>
       <Row name="Interval (sec)"><input className="text-input" type="number" style={{ width: 90 }} value={g.intervalSec} onChange={(e) => set('intervalSec', Number(e.target.value))} /></Row>
       <Row name="Git LFS patterns" desc="Space-separated globs tracked via LFS">
         <input className="text-input" style={{ width: 260 }} value={(g.lfsPatterns || []).join(' ')} onChange={(e) => set('lfsPatterns', e.target.value.split(/\s+/).filter(Boolean))} />
@@ -177,15 +380,17 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
         <button className="btn" onClick={save}>Save</button>
         <button className="btn secondary" onClick={() => run(api.gitInit, 'Init')}>Init repo</button>
-        <button className="btn secondary" onClick={() => run(api.gitClone, 'Clone')}>Clone</button>
-        <button className="btn secondary" onClick={() => run(api.gitPull, 'Pull')}>Pull</button>
-        <button className="btn secondary" onClick={() => run(() => api.gitCommit(), 'Commit')}>Commit</button>
-        <button className="btn secondary" onClick={() => run(api.gitPush, 'Push')}>Push</button>
-        <button className="btn" onClick={() => run(() => api.gitSync(), 'Sync')}>Sync now</button>
+        {!central && <button className="btn secondary" onClick={() => run(api.gitClone, 'Legacy clone')}>Legacy clone</button>}
+        {!central && <button className="btn secondary" onClick={() => run(api.gitPull, 'Legacy pull')}>Legacy pull</button>}
+        <button className="btn secondary" onClick={() => run(() => api.gitCommit(), 'Backup commit')}>Commit snapshot</button>
+        <button className="btn secondary" onClick={() => run(api.gitPush, 'Backup push')}>Push backup</button>
+        <button className="btn" onClick={() => run(() => api.gitSync(), central ? 'Backup' : 'Legacy sync')}>{central ? 'Back up now' : 'Legacy sync now'}</button>
+        {g.remote && <button className="btn secondary" onClick={importRemote}>Preview/apply remote import</button>}
+        {!central && <button className="btn" onClick={migrate}>Migrate to Central Sync</button>}
       </div>
       <div style={{ marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sync log</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Backup/import log</span>
           {log.length > 0 && (
             <button className="btn secondary" style={{ padding: '2px 8px' }} onClick={() => setLog([])}>Clear</button>
           )}
@@ -193,7 +398,7 @@ function GitSettings({ s, reload }: { s: any; reload: () => void }) {
         <textarea
           ref={logRef}
           readOnly
-          value={log.length ? log.join('\n') : 'No git activity yet. Click an action above (Sync now, Pull, Push…) to see logs here.'}
+          value={log.length ? log.join('\n') : 'No Git backup activity yet. Use an action above to see logs here.'}
           style={{
             width: '100%', height: 200, boxSizing: 'border-box', resize: 'vertical',
             background: 'var(--bg-primary)', color: 'var(--text-normal)',
@@ -485,7 +690,7 @@ function About() {
     <div>
       <h2>About WebObsidian</h2>
       <p style={{ color: 'var(--text-muted)' }}>
-        A self-hosted, Obsidian-compatible web app. Vault, QMD search, GitHub sync (with LFS),
+        A self-hosted, Obsidian-compatible web app. Vault, QMD search, Git backup/version history (with LFS),
         agent API and community plugins.
       </p>
       <button className="btn danger" onClick={logout}>Log out</button>

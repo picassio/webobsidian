@@ -1,0 +1,41 @@
+[Unit]
+Description=WebObsidian revision-safe vault synchronization daemon
+Documentation=https://github.com/picassio/webobsidian/tree/main/clients/headless
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=web-vault-sync
+Group=web-vault-sync
+StateDirectory=web-vault-sync
+StateDirectoryMode=0700
+EnvironmentFile=-/etc/web-vault-sync/environment
+LoadCredential=sync-token:/etc/web-vault-sync/token
+ExecStart=/usr/bin/env web-vault-sync --config-dir /var/lib/web-vault-sync watch
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/web-vault-sync
+# Add the configured vault path with a drop-in, for example:
+# ReadWritePaths=/srv/notes
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@
 
 Point it at a folder of Markdown files and edit your notes from any browser — with a
 CodeMirror editor, live preview, wikilinks, an interactive graph, full-text search,
-GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
+Git backup/version history (incl. Git LFS), an API for AI agents, and community-plugin support.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
@@ -17,7 +17,8 @@ GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
 
 [Quick start](#-quick-start-docker) · [Features](#-features) · [Configuration](#-configuration) · [Agent API](#-agent-api) · [Development](#-local-development) · [Architecture](#-architecture)
 
-> 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+> 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) ·
+> 🧭 Central Sync roadmap: [docs/SYNC_ROADMAP.md](docs/SYNC_ROADMAP.md)
 
 </div>
 
@@ -51,8 +52,9 @@ stack runs from a single `docker compose up`.
   mentions), Outgoing links (resolved/unresolved), Tags and Outline.
 - 🔍 **QMD search** — fast full-text + fielded search (`tag:`, `path:`, `title:`), fuzzy +
   prefix matching, incremental indexing, persisted to disk for fast startup.
-- 🔄 **GitHub sync** — native `git` pull / commit / push with **Git LFS** for large
-  attachments, optional auto-sync, and per-file **version history** (browse & restore).
+- 🔄 **Git backup & version history** — commit/push authoritative Central Sync snapshots with **Git LFS**
+  for large attachments; remote changes enter through explicit previewed imports. Upgraded installations may
+  retain warned legacy bidirectional Git only until Central Sync is enabled.
 - 🔐 **Login gate** — a single master password (scrypt-hashed) protects everything; JWT in
   an httpOnly cookie.
 - 🌐 **Public sharing** — turn any note into a read-only, server-rendered (SEO-friendly)
@@ -273,9 +275,9 @@ webobsidian/
                 │ REST + WebSocket                  │ static assets
 ┌───────────────┴──────────────────────────────────▼──────────────────┐
 │                  Server (Node + Express + TypeScript)                │
-│   Auth gate │ Vault FS │ QMD Search │ Git Sync │ API Gate │ Plugins  │
+│   Auth gate │ Vault FS │ QMD Search │ Git backup │ API Gate │ Plugins │
 └──────┬──────────────┬───────────┬────────────┬───────────────┬───────┘
-   settings.json   Vault dir   Search index  GitHub repo    plugins dir
+   settings.json   Vault dir   Search index  Git backup     plugins dir
    (JSON config)   (.md+attach) (in-mem/disk) (git + LFS)   (.obsidian/plugins)
 ```
 
@@ -291,8 +293,8 @@ See [PRD.md §2](PRD.md) for the full design.
 - Master password is scrypt-hashed; the JWT secret is auto-generated.
 - API keys are hashed at rest and scoped (`read` / `write` / `search`) with per-key rate
   limiting and audit logging.
-- All file paths are guarded against traversal; the vault picker is confined to
-  `ALLOWED_ROOTS`.
+- All file paths are guarded against traversal, case-fold collision, and symlink ancestors; the vault picker is
+  confined to `ALLOWED_ROOTS`. Browser device credentials are httpOnly and never enter JavaScript/IndexedDB.
 - Secrets (git token / API keys) live in `data/settings.json` on the server — mount `/data`
   as a private volume and keep it off version control. **Change the default password.**
 
@@ -302,7 +304,14 @@ See [PRD.md §2](PRD.md) for the full design.
 
 - ✅ Works directly on an existing Obsidian vault, including `.obsidian/` config.
 - ⚠️ **Single-user (v1)** — no real-time multi-user collaborative editing yet.
-- ⚠️ Git sync replaces Obsidian Sync/Publish.
+- 🧪 The authoritative revisioned Central Sync server and revision-safe browser client are implemented and
+  undergoing stable-release validation. Git is backup/version history only while Central Sync is enabled.
+- 🧩 The mobile-compatible native plugin source is public at
+  [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync); the downloadable
+  [0.1.2 technical preview](https://github.com/picassio/central-vault-sync/releases/tag/0.1.2) is not yet accepted
+  in Community Plugins. `web-vault-sync` is implemented/tested as a non-root daemon/image but npm/GHCR publication
+  remains credential-gated. See the [roadmap](docs/SYNC_ROADMAP.md), [compatibility matrix](docs/sync/COMPATIBILITY.md),
+  and [operations runbook](docs/sync/OPERATIONS.md).
 - ⚠️ Community-plugin support is a **subset** of the Obsidian API; plugins relying on
   Electron/Node internals may not work.
 

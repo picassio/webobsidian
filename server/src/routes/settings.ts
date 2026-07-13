@@ -25,6 +25,9 @@ settingsRouter.put(
     // A changed vault.path turns the whole files API into read/write over that
     // tree, so constrain it to the allowed roots (same gate as Browse…) and
     // require it to be an existing directory before persisting.
+    if (body.git?.mode === 'legacy-bidirectional' && (await getSettings()).sync.enabled) {
+      return res.status(409).json({ error: 'Legacy bidirectional Git is mutually exclusive with Central Sync' });
+    }
     if (body.vault && typeof body.vault.path === 'string' && body.vault.path) {
       await assertVaultPathAllowed(body.vault);
     }

@@ -4,6 +4,8 @@ import { simpleGit, type SimpleGit, type StatusResult } from 'simple-git';
 import { getSettings } from './settings.js';
 import { getVaultRoot } from './vault.js';
 import { redactUrlCreds } from '../lib/redact.js';
+import { getSyncCoordinator } from './sync-runtime.js';
+import { config } from '../config.js';
 
 /** GitHub-native sync with Git LFS support (PRD FR-4). */
 
@@ -83,13 +85,45 @@ function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
 // callers that already hold the lock (e.g. syncImpl) call the *Impl directly to
 // avoid re-entering the queue and dead-locking.
 export const status = (): Promise<GitStatus> => withGitLock(statusImpl);
-export const pull = (): Promise<string> => withGitLock(pullImpl);
+export async function isLegacyBidirectionalEnabled(): Promise<boolean> {
+  const settings = await getSettings();
+  return !settings.sync.enabled && settings.git.mode === 'legacy-bidirectional';
+}
+export const pull = (): Promise<string> => withGitLock(async () => {
+  if (!(await isLegacyBidirectionalEnabled())) {
+    throw Object.assign(new Error('Git pull is disabled while Central Sync is authoritative; use explicit Git import'), { status: 409 });
+  }
+  return pullImpl();
+});
 export const push = (): Promise<string> => withGitLock(pushImpl);
 export const commitAll = (message?: string): Promise<string> => withGitLock(() => commitAllImpl(message));
 export const init = (): Promise<void> => withGitLock(initImpl);
-export const clone = (): Promise<void> => withGitLock(cloneImpl);
+export const clone = (): Promise<void> => withGitLock(async () => {
+  if (!(await isLegacyBidirectionalEnabled())) {
+    throw Object.assign(new Error('Git clone into the live vault is disabled; use explicit Git import'), { status: 409 });
+  }
+  return cloneImpl();
+});
 export const sync = (message?: string): Promise<{ ok: boolean; log: string[] }> =>
   withGitLock(() => syncImpl(message));
+
+export async function cloneForImport(): Promise<{ directory: string; cleanup: () => Promise<void> }> {
+  const remote = await authedRemote();
+  if (!remote) throw new Error('No remote configured');
+  const settings = await getSettings();
+  const importsRoot = path.join(config.dataDir, 'sync', 'imports');
+  await fs.mkdir(importsRoot, { recursive: true, mode: 0o700 });
+  const directory = await fs.mkdtemp(path.join(importsRoot, 'git-'));
+  try {
+    await simpleGit().clone(remote, directory, ['--branch', settings.git.branch || 'main', '--depth', '1']);
+    const imported = simpleGit({ baseDir: directory });
+    await imported.raw(['lfs', 'pull']).catch(() => {});
+    return { directory, cleanup: () => fs.rm(directory, { recursive: true, force: true }) };
+  } catch (error) {
+    await fs.rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
 
 /** Compose an authenticated remote URL from settings (PAT embedded). */
 async function authedRemote(): Promise<string> {
@@ -136,9 +170,11 @@ export async function ensureLfsAttributes(): Promise<void> {
   const root = await getVaultRoot();
   const file = path.join(root, '.gitattributes');
   let existing = '';
+  let existed = true;
   try {
     existing = await fs.readFile(file, 'utf8');
   } catch {
+    existed = false;
     /* none */
   }
   const lines = new Set(
@@ -158,7 +194,10 @@ export async function ensureLfsAttributes(): Promise<void> {
   // every sync conflicts on .gitattributes — which silently wedges the repo in an
   // unfinished merge and stops sync entirely. Only write when content changes.
   const content = [...lines].sort().join('\n') + '\n';
-  if (content !== existing) await fs.writeFile(file, content);
+  if (content !== existing) {
+    await fs.writeFile(file, content);
+    await getSyncCoordinator().reconcileExternalPath('.gitattributes', existed ? 'change' : 'add');
+  }
 
   // Install the LFS filters locally, but DON'T `git lfs track`: that rewrites
   // .gitattributes itself (non-deterministically), reintroducing the conflict above.
@@ -221,7 +260,7 @@ async function statusImpl(): Promise<GitStatus> {
       notAdded: 0,
       conflicted: [],
       lfsAvailable: await lfsAvailable(),
-      remote: s.git.remote,
+      remote: redactUrlCreds(s.git.remote),
       clean: true,
     };
   }
@@ -237,7 +276,7 @@ async function statusImpl(): Promise<GitStatus> {
     notAdded: st.not_added.length,
     conflicted: st.conflicted,
     lfsAvailable: await lfsAvailable(),
-    remote: s.git.remote,
+    remote: redactUrlCreds(s.git.remote),
     clean: st.isClean(),
   };
 }
@@ -388,65 +427,32 @@ async function pushImpl(): Promise<string> {
 
 // Debounced auto-commit (+push) after saves, when enabled in settings.
 let autoCommitTimer: NodeJS.Timeout | null = null;
+let autoCommitFailures = 0;
 export function scheduleAutoCommitOnSave(): void {
   if (autoCommitTimer) clearTimeout(autoCommitTimer);
-  autoCommitTimer = setTimeout(async () => {
-    try {
-      const s = await getSettings();
-      if (!s.git.enabled || !s.git.autoCommitOnSave) return;
-      // Full sync (pull→merge→push), not a bare push: pushing without first
-      // integrating the remote is exactly what left the repo permanently rejected
-      // ("fetch first") once another device had pushed in the meantime.
-      if (s.git.remote) await sync().catch((e) => console.warn('[git] auto-sync failed:', redactUrlCreds(e?.message)));
-      else await commitAll();
-    } catch (e: any) {
-      console.warn('[git] auto-commit failed:', redactUrlCreds(e.message));
-    }
-  }, 5000);
+  autoCommitTimer = setTimeout(runAutoCommitBackup, 5000);
 }
-
-/** Auto-resolve conflicts in machine-generated files so multi-device sync converges
- *  without manual intervention: regenerate .gitattributes, keep our copy of Obsidian
- *  UI state (.obsidian/**). Returns true only if ALL conflicts were resolved. */
-async function resolveNoiseConflicts(g: SimpleGit): Promise<boolean> {
-  const st = await g.status();
-  if (!st.conflicted.length) return true;
-  let remaining = 0;
-  for (const f of st.conflicted) {
-    if (f === '.gitattributes') {
-      await ensureLfsAttributes();
-      await g.add(['.gitattributes']);
-    } else if (f.startsWith('.obsidian/')) {
-      await g.raw(['checkout', '--ours', '--', f]).catch(() => {});
-      await g.add([f]);
-    } else {
-      remaining++;
-    }
-  }
-  return remaining === 0;
-}
-
-/** If a previous sync left an unfinished/conflicted merge, get back to a clean state
- *  so the next sync isn't permanently stuck on "you have unmerged files". */
-async function recoverMerge(g: SimpleGit): Promise<void> {
-  const root = await getVaultRoot();
+async function runAutoCommitBackup(): Promise<void> {
   try {
-    await fs.access(path.join(root, '.git', 'MERGE_HEAD'));
-  } catch {
-    return; // not mid-merge
-  }
-  if (await resolveNoiseConflicts(g)) {
-    await g.raw(['commit', '--no-edit']).catch(() => {});
-  } else {
-    await g.raw(['merge', '--abort']).catch(async () => {
-      await g.raw(['reset', '--merge']).catch(() => {});
-    });
+    const s = await getSettings();
+    if (!s.git.enabled || !s.git.autoCommitOnSave) return;
+    // Central Sync owns all vault mutations. Git is backup-only: commit and
+    // push the authoritative vault, never pull/merge behind the coordinator.
+    if (s.git.remote) {
+      const result = await sync();
+      if (!result.ok) throw new Error(result.log.at(-1) ?? 'Git backup failed');
+    } else await commitAll();
+    autoCommitFailures = 0;
+  } catch (e: any) {
+    autoCommitFailures += 1;
+    const delay = Math.min(60 * 60_000, 5000 * 2 ** Math.min(autoCommitFailures, 8));
+    console.warn(`[git-backup] auto-commit failed; retry in ${Math.round(delay / 1000)}s:`, redactUrlCreds(e.message));
+    autoCommitTimer = setTimeout(runAutoCommitBackup, delay);
   }
 }
 
-/** Convenience: stage+commit+pull+push in one go. Reports conflicts. Runs entirely
- *  inside the git queue (via the exported `sync` wrapper), so it calls the unlocked
- *  *Impl helpers directly — re-entering withGitLock here would dead-lock. */
+/** Backup-only stage+commit+push. Remote integration is explicit import and may
+ *  never mutate the authoritative vault behind SyncCoordinator. */
 async function syncImpl(message?: string): Promise<{ ok: boolean; log: string[] }> {
   const log: string[] = [];
   const g = await git();
@@ -454,23 +460,18 @@ async function syncImpl(message?: string): Promise<{ ok: boolean; log: string[] 
     await initImpl();
     log.push('Initialized repository');
   }
-  await recoverMerge(g); // unwedge a prior stuck merge before doing anything
-  log.push(await commitAllImpl(message || ''));
-  try {
+  if (await isLegacyBidirectionalEnabled()) {
     log.push(await pullImpl());
-  } catch (e: any) {
-    // Pull hit a merge conflict. Auto-resolve generated-file noise and finish the
-    // merge; only bail (cleanly, not wedged) if real note conflicts remain.
-    if (await resolveNoiseConflicts(g)) {
-      await g.raw(['commit', '--no-edit']).catch(() => {});
-      if (await lfsAvailable()) await g.raw(['lfs', 'pull']).catch(() => {});
-      log.push('Pulled (auto-resolved generated-file conflicts)');
-    } else {
-      const st = await g.status();
-      await g.raw(['merge', '--abort']).catch(() => {});
-      return { ok: false, log: [...log, `Conflicts need manual resolution: ${st.conflicted.join(', ')}`] };
+  } else {
+    const root = await getVaultRoot();
+    try {
+      await fs.access(path.join(root, '.git', 'MERGE_HEAD'));
+      throw new Error('unfinished legacy Git merge blocks backup-only mode; resolve migration blockers explicitly');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
+  log.push(await commitAllImpl(message || ''));
   try {
     log.push(await pushImpl());
   } catch (e: any) {

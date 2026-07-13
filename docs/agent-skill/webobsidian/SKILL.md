@@ -71,12 +71,17 @@ for queries; encode `/`-containing paths in the URL path, e.g. `Notes/Ideas.md` 
 | GET | `/api/v1/health` | – | Liveness check |
 | GET | `/api/v1/notes?offset=&limit=` | read | List markdown notes (paginated) |
 | GET | `/api/v1/notes/{path}` | read | Read a note + parsed metadata |
-| PUT | `/api/v1/notes/{path}` | write | Create / overwrite a note — body `{"content":"..."}` |
-| PATCH | `/api/v1/notes/{path}` | write | Append — body `{"append":"..."}` |
-| DELETE | `/api/v1/notes/{path}` | write | Move note to trash |
+| PUT | `/api/v1/notes/{path}` | write | Revision-conditional create/update |
+| PATCH | `/api/v1/notes/{path}` | write | Revision-conditional append |
+| DELETE | `/api/v1/notes/{path}` | write | Revision-conditional move to trash |
 | GET | `/api/v1/search?q=&limit=` | search | QMD search (fielded: `tag:`, `path:`, `title:`) |
 | GET | `/api/v1/backlinks?path=` | read | Notes linking to a path |
 | GET | `/api/v1/tags` | read | All tags with counts |
+
+Every mutation requires a positive monotonically increasing `clientSequence` per key and a 16–256 character
+`idempotencyKey`. For update/append/delete, first GET the note and send its returned `baseRevision`; stale writes
+return 409 without overwriting. Missing conditional metadata returns 428. Reuse an idempotency key only to retry
+its exact original payload.
 
 ## Recipes
 
@@ -87,18 +92,20 @@ curl -s -H "X-API-Key: $KEY" "$BASE/api/v1/notes?limit=10"
 # Read a note (URL-encode the path's query value if it has spaces/slashes)
 curl -s -H "X-API-Key: $KEY" "$BASE/api/v1/notes/Welcome.md"
 
-# Create or overwrite a note
+# Create a new note
 curl -s -X PUT -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"content":"# Title\n\nBody written by the agent."}' \
+  -d '{"content":"# Title\n\nBody written by the agent.","clientSequence":1,"idempotencyKey":"agent-create-note-0001"}' \
   "$BASE/api/v1/notes/Agent/Generated.md"
 
-# Append to a note (creates it if missing)
+# Append after GET returned revision 1
 curl -s -X PATCH -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"append":"\n- another bullet"}' \
+  -d '{"append":"\n- another bullet","baseRevision":1,"clientSequence":2,"idempotencyKey":"agent-append-note-0002"}' \
   "$BASE/api/v1/notes/Agent/Generated.md"
 
-# Delete a note (→ trash)
-curl -s -X DELETE -H "X-API-Key: $KEY" "$BASE/api/v1/notes/Agent/Generated.md"
+# Delete after GET returned revision 2 (DELETE carries JSON metadata)
+curl -s -X DELETE -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"baseRevision":2,"clientSequence":3,"idempotencyKey":"agent-delete-note-0003"}' \
+  "$BASE/api/v1/notes/Agent/Generated.md"
 
 # Full-text search (fielded queries supported)
 curl -s -G -H "X-API-Key: $KEY" "$BASE/api/v1/search" \
@@ -115,7 +122,7 @@ curl -s -H "X-API-Key: $KEY" "$BASE/api/v1/tags"
 
 ```jsonc
 // GET /api/v1/notes/{path}
-{ "path": "Welcome.md", "content": "...", "title": "Welcome",
+{ "path": "Welcome.md", "content": "...", "entryId": "entry_...", "revision": 7, "hash": "sha256...", "title": "Welcome",
   "frontmatter": { "tags": ["welcome"] }, "tags": ["welcome"], "links": ["Notes/Ideas"] }
 
 // GET /api/v1/search

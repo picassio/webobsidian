@@ -1,0 +1,138 @@
+{
+  "handshakeRequest": {
+    "protocolVersion": "1.0",
+    "deviceId": "device_alpha_0001",
+    "deviceName": "Linux laptop",
+    "lastAppliedSequence": 40,
+    "capabilities": ["resumable-blobs", "conflict-copy"]
+  },
+  "handshakeResponse": {
+    "protocolVersion": "1.0",
+    "vaultId": "vault_example_0001",
+    "deviceId": "device_alpha_0001",
+    "latestSequence": 43,
+    "minimumRetainedSequence": 1,
+    "readOnly": false,
+    "limits": {
+      "inlineTextBytes": 1048576,
+      "blobChunkBytes": 8388608,
+      "maxOperationsPerBatch": 100,
+      "requestsPerMinute": 120,
+      "manifestPageSize": 1000,
+      "manifestTtlSec": 900,
+      "uploadTtlSec": 86400
+    },
+    "capabilities": ["resumable-blobs", "conflict-copy", "diff3"]
+  },
+  "manifestPage": {
+    "protocolVersion": "1.0",
+    "snapshotId": "snapshot_example_0001",
+    "snapshotSequence": 40,
+    "nextCursor": null,
+    "entries": [
+      {
+        "entryId": "entry_notes_00001",
+        "path": "Notes/Welcome.md",
+        "kind": "file",
+        "revision": 1,
+        "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 12,
+        "modifiedAt": "2026-07-12T00:00:00.000Z",
+        "deleted": false,
+        "sequence": 40
+      }
+    ]
+  },
+  "changesResponse": {
+    "protocolVersion": "1.0",
+    "latestSequence": 43,
+    "nextAfter": 43,
+    "hasMore": false,
+    "events": [
+      {
+        "sequence": 41,
+        "eventId": "event_example_0041",
+        "actor": { "type": "device", "id": "device_alpha_0001" },
+        "operation": "modify",
+        "entryId": "entry_notes_00001",
+        "path": "Notes/Welcome.md",
+        "baseRevision": 1,
+        "revision": 2,
+        "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "previousHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 18,
+        "occurredAt": "2026-07-12T00:00:01.000Z"
+      },
+      {
+        "sequence": 42,
+        "eventId": "event_example_0042",
+        "actor": { "type": "web", "id": "browser_example_001" },
+        "operation": "rename",
+        "entryId": "entry_notes_00001",
+        "path": "Notes/Start.md",
+        "oldPath": "Notes/Welcome.md",
+        "baseRevision": 2,
+        "revision": 3,
+        "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 18,
+        "occurredAt": "2026-07-12T00:00:02.000Z"
+      },
+      {
+        "sequence": 43,
+        "eventId": "event_example_0043",
+        "actor": { "type": "web", "id": "browser_example_001" },
+        "operation": "delete",
+        "entryId": "entry_notes_00001",
+        "path": "Notes/Start.md",
+        "baseRevision": 3,
+        "revision": 4,
+        "hash": null,
+        "previousHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 0,
+        "occurredAt": "2026-07-12T00:00:03.000Z"
+      }
+    ]
+  },
+  "operationsRequest": {
+    "protocolVersion": "1.0",
+    "operations": [
+      {
+        "operation": "create",
+        "clientSequence": 1,
+        "idempotencyKey": "device_alpha_0001:1:abcd",
+        "path": "Inbox/New.md",
+        "kind": "file",
+        "content": {
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size": 5,
+          "inlineText": "hello"
+        }
+      }
+    ]
+  },
+  "operationsResponse": {
+    "protocolVersion": "1.0",
+    "latestSequence": 44,
+    "results": [
+      {
+        "idempotencyKey": "device_alpha_0001:1:abcd",
+        "status": "accepted",
+        "eventId": "event_example_0044",
+        "sequence": 44,
+        "entryId": "entry_inbox_00001",
+        "revision": 1,
+        "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "path": "Inbox/New.md"
+      }
+    ]
+  },
+  "errorEnvelope": {
+    "protocolVersion": "1.0",
+    "error": {
+      "code": "revision_conflict",
+      "message": "The entry changed after the submitted base revision.",
+      "retryable": false,
+      "details": { "entryId": "entry_notes_00001", "currentRevision": 4 }
+    }
+  }
+}

@@ -6,7 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY server/package.json ./server/
 COPY web/package.json ./web/
-RUN npm install
+COPY packages/sync-core/package.json ./packages/sync-core/
+COPY clients/headless/package.json ./clients/headless/
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -21,11 +23,16 @@ RUN apk add --no-cache git git-lfs && git lfs install --system
 # Install production deps for the server workspace only
 COPY package.json package-lock.json* ./
 COPY server/package.json ./server/
-RUN npm install --omit=dev --workspace server
+COPY web/package.json ./web/
+COPY packages/sync-core/package.json ./packages/sync-core/
+COPY clients/headless/package.json ./clients/headless/
+RUN npm ci --omit=dev --workspace server
 
 # Copy built artifacts
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/server/public ./server/public
+COPY --from=build /app/packages/sync-core/package.json ./packages/sync-core/package.json
+COPY --from=build /app/packages/sync-core/dist ./packages/sync-core/dist
 
 ENV PORT=8787 \
     HOST=0.0.0.0 \
@@ -38,6 +45,6 @@ VOLUME ["/vault", "/data"]
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD wget -qO- http://localhost:8787/healthz || exit 1
+  CMD wget -qO- http://127.0.0.1:8787/healthz || exit 1
 
 CMD ["node", "server/dist/index.js"]

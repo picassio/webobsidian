@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { api, type TreeNode, type ShareRecord } from './api';
 import { findNode } from './tree';
+import { IndexedDbSyncPersistence, type PersistedDraft } from './sync-db';
+import type { SyncConnectionStatus } from './sync-engine';
+import { sha256Text } from '@webobsidian/sync-core';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -18,6 +21,19 @@ export const GRAPH_PATH = 'graph://view';
 export interface Tab {
   path: string;
   title: string;
+}
+
+export interface DocumentState {
+  path: string;
+  entryId: string | null;
+  content: string;
+  baseContent: string;
+  revision: number | null;
+  hash: string | null;
+  dirtyGeneration: number;
+  saveGeneration: number;
+  pending: boolean;
+  error: string | null;
 }
 
 /** A color group in the graph (nodes matching `query` are tinted `color`). */
@@ -83,6 +99,10 @@ export interface ContextMenuState {
 interface AppState {
   authed: boolean;
   setAuthed: (v: boolean) => void;
+  syncStatus: SyncConnectionStatus;
+  syncLag: number;
+  syncConflictCount: number;
+  setSyncStatus: (status: SyncConnectionStatus, lag?: number, conflicts?: number) => void;
   mustChangePassword: boolean;
   setMustChangePassword: (v: boolean) => void;
 
@@ -98,6 +118,12 @@ interface AppState {
   goForward: () => void;
   content: string;
   dirty: boolean;
+  /** Authoritative identity/revision of the active document. */
+  activeEntryId: string | null;
+  activeRevision: number | null;
+  activeHash: string | null;
+  editGeneration: number;
+  documents: Record<string, DocumentState>;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
 
@@ -285,6 +311,27 @@ let canSave = false;
 let suppressSave = false;
 let saveTimer: number | undefined;
 let lastSaved = '';
+const documentSaveChains = new Map<string, Promise<void>>();
+let syncSaveHandler: ((document: DocumentState) => Promise<boolean>) | null = null;
+export function registerSyncSaveHandler(handler: ((document: DocumentState) => Promise<boolean>) | null): void {
+  syncSaveHandler = handler;
+}
+const syncPersistence = new IndexedDbSyncPersistence();
+
+function persistDraft(document: DocumentState): void {
+  const draft: PersistedDraft = {
+    path: document.path,
+    entryId: document.entryId,
+    revision: document.revision,
+    hash: document.hash,
+    content: document.content,
+    baseContent: document.baseContent,
+    dirtyGeneration: document.dirtyGeneration,
+    saveGeneration: document.saveGeneration,
+    savedAt: new Date().toISOString(),
+  };
+  void syncPersistence.putDraft(draft).catch(() => {});
+}
 
 function scheduleSave(): void {
   window.clearTimeout(saveTimer);
@@ -293,7 +340,7 @@ function scheduleSave(): void {
     const json = JSON.stringify(payload);
     if (json === lastSaved) return;
     lastSaved = json;
-    api.putUiState(payload, CLIENT_ID).catch(() => {});
+    void syncPersistence.putWorkspace(payload).catch(() => {});
   }, 500);
 }
 
@@ -301,6 +348,13 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       authed: false,
       setAuthed: (v) => set({ authed: v }),
+      syncStatus: 'disabled',
+      syncLag: 0,
+      syncConflictCount: 0,
+      setSyncStatus: (syncStatus, syncLag = 0, syncConflictCount) => set((state) => ({
+        syncStatus, syncLag,
+        syncConflictCount: syncConflictCount ?? state.syncConflictCount,
+      })),
       mustChangePassword: false,
       setMustChangePassword: (v) => set({ mustChangePassword: v }),
 
@@ -340,6 +394,11 @@ export const useStore = create<AppState>()(
       },
       content: '',
       dirty: false,
+      activeEntryId: null,
+      activeRevision: null,
+      activeHash: null,
+      editGeneration: 0,
+      documents: {},
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
 
@@ -362,11 +421,25 @@ export const useStore = create<AppState>()(
       openToSide: async (path, direction) => {
         if (!TEXT_RE.test(path)) return;
         const r = await api.read(path);
-        set((s) => ({
-          splitPath: path,
-          splitContent: typeof r === 'string' ? r : r.content,
-          splitDirection: direction ?? s.splitDirection,
-        }));
+        const content = typeof r === 'string' ? r : r.content;
+        set((s) => {
+          const existing = s.documents[path];
+          const document: DocumentState = existing && existing.dirtyGeneration > existing.saveGeneration ? existing : {
+            path, content, baseContent: content,
+            entryId: typeof r === 'string' ? null : (r.entryId ?? null),
+            revision: typeof r === 'string' ? null : (r.revision ?? null),
+            hash: typeof r === 'string' ? null : (r.hash ?? null),
+            dirtyGeneration: existing?.dirtyGeneration ?? 0,
+            saveGeneration: existing?.dirtyGeneration ?? 0,
+            pending: false, error: null,
+          };
+          return {
+            splitPath: path,
+            splitContent: document.content,
+            splitDirection: direction ?? s.splitDirection,
+            documents: { ...s.documents, [path]: document },
+          };
+        });
       },
       closeSplit: () => set({ splitPath: null, splitContent: '' }),
 
@@ -422,6 +495,9 @@ export const useStore = create<AppState>()(
           activePath: GRAPH_PATH,
           content: '',
           dirty: false,
+          activeEntryId: null,
+          activeRevision: null,
+          activeHash: null,
           ...pushHistory(s, GRAPH_PATH),
         }));
       },
@@ -483,15 +559,50 @@ export const useStore = create<AppState>()(
         // view — never read it as a note nor pollute Recent with it.
         const isFolder = findNode(get().tree, path)?.type === 'folder';
         let content = '';
+        let entryId: string | null = null;
+        let revision: number | null = null;
+        let hash: string | null = null;
+        let document = get().documents[path];
         if (!isFolder && TEXT_RE.test(path)) {
-          const r = await api.read(path);
-          content = typeof r === 'string' ? r : r.content;
+          const hasLocalDraft = document && document.dirtyGeneration > document.saveGeneration;
+          if (hasLocalDraft) {
+            content = document.content;
+            entryId = document.entryId;
+            revision = document.revision;
+            hash = document.hash;
+          } else {
+            const r = await api.read(path);
+            content = typeof r === 'string' ? r : r.content;
+            if (typeof r !== 'string') {
+              entryId = r.entryId ?? null;
+              revision = r.revision ?? null;
+              hash = r.hash ?? null;
+            }
+            document = {
+              path, entryId, content, baseContent: content, revision, hash,
+              dirtyGeneration: document?.dirtyGeneration ?? 0,
+              saveGeneration: document?.dirtyGeneration ?? 0,
+              pending: false, error: null,
+            };
+          }
         }
         const title = path.split('/').pop() ?? path;
         set((s) => {
           const tabs = s.tabs.find((t) => t.path === path) ? s.tabs : [...s.tabs, { path, title }];
           const recent = isFolder ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
-          return { tabs, activePath: path, content, dirty: false, recent, ...pushHistory(s, path) };
+          const dirty = Boolean(document && document.dirtyGeneration > document.saveGeneration);
+          return {
+            tabs,
+            activePath: path,
+            content,
+            dirty,
+            activeEntryId: entryId,
+            activeRevision: revision,
+            activeHash: hash,
+            ...(document ? { documents: { ...s.documents, [path]: document } } : {}),
+            recent,
+            ...pushHistory(s, path),
+          };
         });
       },
 
@@ -513,17 +624,103 @@ export const useStore = create<AppState>()(
           const tabs = s.tabs.filter((t) => t.path !== path);
           const wasActive = s.activePath === path;
           const activePath = wasActive ? (tabs.at(-1)?.path ?? null) : s.activePath;
-          return { tabs, activePath, ...(wasActive ? { content: '', dirty: false } : {}) };
+          return {
+            tabs,
+            activePath,
+            ...(wasActive
+              ? { content: '', dirty: false, activeEntryId: null, activeRevision: null, activeHash: null }
+              : {}),
+          };
         }),
 
-      setContent: (c) => set({ content: c, dirty: true }),
+      setContent: (content) => {
+        let draft: DocumentState | null = null;
+        set((state) => {
+          const editGeneration = state.editGeneration + 1;
+          if (!state.activePath || !TEXT_RE.test(state.activePath)) return { content, dirty: true, editGeneration };
+          const existing = state.documents[state.activePath] ?? {
+            path: state.activePath,
+            entryId: state.activeEntryId,
+            content: state.content,
+            baseContent: state.content,
+            revision: state.activeRevision,
+            hash: state.activeHash,
+            dirtyGeneration: state.editGeneration,
+            saveGeneration: state.editGeneration,
+            pending: false,
+            error: null,
+          };
+          draft = { ...existing, content, dirtyGeneration: editGeneration, error: null };
+          return {
+            content, dirty: true, editGeneration,
+            documents: { ...state.documents, [state.activePath]: draft },
+          };
+        });
+        if (draft) persistDraft(draft);
+      },
 
-      save: async () => {
-        const { activePath, content, dirty } = get();
-        if (!activePath || !dirty) return;
-        if (!TEXT_RE.test(activePath)) return;
-        await api.write(activePath, content);
-        set({ dirty: false });
+      save: () => {
+        const path = get().activePath;
+        if (!path || !TEXT_RE.test(path)) return Promise.resolve();
+        const attempt = async () => {
+          const document = get().documents[path];
+          if (!document || document.dirtyGeneration <= document.saveGeneration) return;
+          const generation = document.dirtyGeneration;
+          set((state) => ({
+            documents: {
+              ...state.documents,
+              [path]: { ...state.documents[path]!, pending: true, error: null },
+            },
+          }));
+          try {
+            if (syncSaveHandler && await syncSaveHandler(document)) return;
+            const result = await api.write(path, document.content, document.revision ?? undefined);
+            let savedDocument: DocumentState | null = null;
+            set((state) => {
+              const current = state.documents[path];
+              if (!current) return {};
+              const updated: DocumentState = {
+                ...current,
+                entryId: result.entryId,
+                revision: result.revision,
+                hash: result.hash,
+                baseContent: document.content,
+                saveGeneration: Math.max(current.saveGeneration, generation),
+                pending: false,
+                error: null,
+              };
+              savedDocument = updated;
+              const active = state.activePath === path;
+              return {
+                documents: { ...state.documents, [path]: updated },
+                ...(active ? {
+                  dirty: updated.dirtyGeneration > updated.saveGeneration,
+                  activeEntryId: updated.entryId,
+                  activeRevision: updated.revision,
+                  activeHash: updated.hash,
+                } : {}),
+              };
+            });
+            if (savedDocument) persistDraft(savedDocument);
+          } catch (error) {
+            set((state) => {
+              const current = state.documents[path];
+              if (!current) return {};
+              return {
+                documents: {
+                  ...state.documents,
+                  [path]: { ...current, pending: false, error: error instanceof Error ? error.message : 'Save failed' },
+                },
+                ...(state.activePath === path ? { dirty: true } : {}),
+              };
+            });
+            throw error;
+          }
+        };
+        const previous = documentSaveChains.get(path) ?? Promise.resolve();
+        const result = previous.then(attempt, attempt);
+        documentSaveChains.set(path, result.catch(() => undefined));
+        return result;
       },
 
       createNote: async (path, body) => {
@@ -602,11 +799,67 @@ export const useStore = create<AppState>()(
       hydrate: async () => {
         // Active tab + split pane content aren't persisted (only the paths) —
         // re-read them from the vault after a reload. Drop tabs whose file is gone.
+        const [persistedDrafts, projections] = await Promise.all([
+          syncPersistence.drafts().catch(() => []),
+          syncPersistence.entries().catch(() => []),
+        ]);
+        if (persistedDrafts.length > 0) {
+          set((state) => ({
+            documents: {
+              ...state.documents,
+              ...Object.fromEntries(persistedDrafts.map((draft) => {
+                const projection = projections.find((entry) =>
+                  !entry.deleted && (entry.entryId === draft.entryId || entry.path === draft.path),
+                );
+                const converged = projection?.hash === sha256Text(draft.content);
+                return [draft.path, {
+                  path: draft.path,
+                  entryId: projection?.entryId ?? draft.entryId,
+                  revision: converged ? projection!.revision : draft.revision,
+                  hash: converged ? projection!.hash : draft.hash,
+                  content: draft.content,
+                  baseContent: converged ? draft.content : (draft.baseContent ?? draft.content),
+                  dirtyGeneration: draft.dirtyGeneration,
+                  saveGeneration: converged ? draft.dirtyGeneration : draft.saveGeneration,
+                  pending: false,
+                  error: null,
+                } satisfies DocumentState];
+              })),
+            },
+          }));
+        }
         const { activePath, splitPath, tabs } = get();
         if (activePath && TEXT_RE.test(activePath)) {
           try {
+            const local = get().documents[activePath];
+            if (local && local.dirtyGeneration > local.saveGeneration) {
+              set({
+                content: local.content,
+                dirty: true,
+                activeEntryId: local.entryId,
+                activeRevision: local.revision,
+                activeHash: local.hash,
+                editGeneration: local.dirtyGeneration,
+              });
+            } else {
             const r = await api.read(activePath);
-            set({ content: typeof r === 'string' ? r : r.content, dirty: false });
+            const content = typeof r === 'string' ? r : r.content;
+            const entryId = typeof r === 'string' ? null : (r.entryId ?? null);
+            const revision = typeof r === 'string' ? null : (r.revision ?? null);
+            const hash = typeof r === 'string' ? null : (r.hash ?? null);
+            const document: DocumentState = {
+              path: activePath, entryId, revision, hash, content, baseContent: content,
+              dirtyGeneration: 0, saveGeneration: 0, pending: false, error: null,
+            };
+            set((state) => ({
+              content,
+              dirty: false,
+              activeEntryId: entryId,
+              activeRevision: revision,
+              activeHash: hash,
+              documents: { ...state.documents, [activePath]: document },
+            }));
+            }
           } catch {
             set({
               tabs: tabs.filter((t) => t.path !== activePath),
@@ -618,7 +871,20 @@ export const useStore = create<AppState>()(
         if (splitPath && TEXT_RE.test(splitPath)) {
           try {
             const r = await api.read(splitPath);
-            set({ splitContent: typeof r === 'string' ? r : r.content });
+            const content = typeof r === 'string' ? r : r.content;
+            set((state) => {
+              const existing = state.documents[splitPath];
+              const document: DocumentState = existing && existing.dirtyGeneration > existing.saveGeneration ? existing : {
+                path: splitPath, content, baseContent: content,
+                entryId: typeof r === 'string' ? null : (r.entryId ?? null),
+                revision: typeof r === 'string' ? null : (r.revision ?? null),
+                hash: typeof r === 'string' ? null : (r.hash ?? null),
+                dirtyGeneration: existing?.dirtyGeneration ?? 0,
+                saveGeneration: existing?.dirtyGeneration ?? 0,
+                pending: false, error: null,
+              };
+              return { splitContent: document.content, documents: { ...state.documents, [splitPath]: document } };
+            });
           } catch {
             set({ splitPath: null, splitContent: '' });
           }
@@ -627,13 +893,21 @@ export const useStore = create<AppState>()(
 
       loadUiState: async () => {
         try {
-          const s = await api.getUiState();
-          suppressSave = true;
-          applyPersisted(s, set);
-          lastSaved = JSON.stringify(pickPersisted(get()));
-          suppressSave = false;
+          let workspace = await syncPersistence.getWorkspace<Record<string, unknown>>();
+          if (!workspace && !(await syncPersistence.isWorkspaceMigrated())) {
+            // One-time migration from the pre-sync shared server workspace. All later writes are device-local.
+            workspace = await api.getUiState();
+            await syncPersistence.putWorkspace(workspace);
+            await syncPersistence.markWorkspaceMigrated();
+          }
+          if (workspace) {
+            suppressSave = true;
+            applyPersisted(workspace, set);
+            lastSaved = JSON.stringify(pickPersisted(get()));
+            suppressSave = false;
+          }
         } catch {
-          /* first run / not authed */
+          /* first run, IndexedDB unavailable, or not authenticated */
         }
         canSave = true;
         await get().hydrate();

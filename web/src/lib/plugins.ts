@@ -38,7 +38,10 @@ class Vault extends Events {
   getName() { return 'WebObsidian'; }
   async read(file: TFile) { const r = await api.read(file.path); return typeof r === 'string' ? r : r.content; }
   async cachedRead(file: TFile) { return this.read(file); }
-  async modify(file: TFile, data: string) { await api.write(file.path, data); }
+  async modify(file: TFile, data: string) {
+    const current = await api.revision(file.path);
+    await api.write(file.path, data, current.revision);
+  }
   async create(path: string, data: string) { await api.write(path, data); return new TFile(path, path.split('/').pop()!); }
   async delete(file: TFile) { await api.remove(file.path); }
   getMarkdownFiles(): TFile[] { return flattenFiles(); }

@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-vault-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web-vault-sync }
+  template:
+    metadata:
+      labels: { app: web-vault-sync }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: sync
+          image: ghcr.io/picassio/web-vault-sync:0.1.0
+          args: ["watch"]
+          env:
+            - { name: WEB_VAULT_SYNC_CONFIG_DIR, value: /config }
+            - { name: WEB_VAULT_SYNC_TOKEN_FILE, value: /run/secrets/sync-token }
+          volumeMounts:
+            - { name: config, mountPath: /config }
+            - { name: vault, mountPath: /vault }
+            - { name: token, mountPath: /run/secrets, readOnly: true }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          livenessProbe:
+            exec: { command: ["node", "/app/clients/headless/dist/cli.js", "status", "--json"] }
+            periodSeconds: 30
+          readinessProbe:
+            exec: { command: ["node", "/app/clients/headless/dist/cli.js", "doctor", "--json"] }
+            periodSeconds: 30
+      volumes:
+        - name: config
+          persistentVolumeClaim: { claimName: web-vault-sync-config }
+        - name: vault
+          persistentVolumeClaim: { claimName: vault-files }
+        - name: token
+          secret:
+            secretName: web-vault-sync
+            items: [{ key: token, path: sync-token, mode: 256 }]

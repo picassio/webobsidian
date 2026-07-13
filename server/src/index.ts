@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fs } from 'node:fs';
+import { createReadStream, promises as fs, type Stats } from 'node:fs';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
@@ -24,6 +24,7 @@ import { keysRouter } from './routes/keys.js';
 import { pluginsRouter } from './routes/plugins.js';
 import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
+import { syncRouter } from './routes/sync.js';
 import { sharesRouter, publicSharesRouter } from './routes/shares.js';
 import { sharePageRouter } from './routes/sharepage.js';
 import { initSearch, qmd } from './services/search.js';
@@ -32,6 +33,13 @@ import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js'
 import { setBroadcaster, broadcast } from './services/realtime.js';
 import { getVaultRoot, ensureVault, invalidateStat } from './services/vault.js';
 import { startAutoSync } from './services/autosync.js';
+import { scheduleAutoCommitOnSave } from './services/git.js';
+import { onFileRenamed } from './services/shares.js';
+import { getSyncCoordinator, getSyncDeviceStore, initializeSyncRuntime, shutdownSyncRuntime } from './services/sync-runtime.js';
+import { registerSyncWebSocketDisconnect } from './sync/ws-registry.js';
+import { sha256Chunks, type SyncEvent } from '@webobsidian/sync-core';
+import { VaultStateStore } from './sync/vault-state.js';
+import { wsTickets } from './sync/ws-tickets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +56,11 @@ async function main() {
   await loadSettings();
   await setPasswordIfInitial();
   await ensureVault();
+  const vaultRoot = await getVaultRoot();
+  const syncCoordinator = await initializeSyncRuntime(vaultRoot, config.dataDir);
+  if (syncCoordinator.health().readOnly) {
+    console.error(`[sync] read-only degraded mode: ${syncCoordinator.health().reason}`);
+  }
 
   const app = express();
   app.set('trust proxy', 1);
@@ -94,13 +107,17 @@ async function main() {
   }
 
   // Health (no auth) — for docker healthcheck
-  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/healthz', (_req, res) => {
+    const sync = syncCoordinator.health();
+    res.status(sync.readOnly ? 503 : 200).json({ ok: !sync.readOnly, sync });
+  });
 
   // Routes. NOTE: specific /api/* routers must be registered BEFORE the broad
   // '/api' search router, whose router-level requireAuth middleware would
   // otherwise gate every /api/* path (incl. /api/v1 and /api/keys) by prefix.
   app.use('/auth', authRouter);
   app.use('/api/v1', agentRouter); // agent API (api-key auth)
+  app.use('/api/sync/v1', syncRouter);
   app.use('/api/files', filesRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/git', gitRouter);
@@ -129,10 +146,12 @@ async function main() {
   await initSearch();
   await buildLinkGraph();
   await buildFileIndex();
+  setupSyncSubscribers(syncCoordinator);
   console.log('[boot] index ready');
 
   const server = http.createServer(app);
-  setupWebsocket(server);
+  const syncVaultId = (await new VaultStateStore(config.dataDir).loadOrCreate()).vaultId;
+  setupWebsocket(server, syncVaultId);
   await setupWatcher();
   startAutoSync();
 
@@ -141,13 +160,64 @@ async function main() {
     console.log(`  Vault: ${config.defaultVaultPath}`);
     console.log(`  Data:  ${config.dataDir}\n`);
   });
+  let stopping = false;
+  const stop = (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`[shutdown] ${signal}: draining HTTP and checkpointing sync projection`);
+    const checkpoint = shutdownSyncRuntime();
+    server.close(() => {
+      void checkpoint.then(() => process.exit(0), (error) => {
+        console.error('[shutdown] sync checkpoint failed:', error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      });
+    });
+    setTimeout(() => process.exit(1), 30_000).unref();
+  };
+  process.once('SIGTERM', () => stop('SIGTERM'));
+  process.once('SIGINT', () => stop('SIGINT'));
+}
+
+function setupSyncSubscribers(coordinator: Awaited<ReturnType<typeof initializeSyncRuntime>>) {
+  coordinator.subscribe(async (event: SyncEvent) => {
+    const removed = event.operation === 'delete' || event.operation === 'rmdir';
+    const oldPath = event.oldPath;
+    invalidateStat(event.path);
+    if (oldPath) invalidateStat(oldPath);
+    if (removed) {
+      unindexFile(event.path);
+      qmd.remove(event.path);
+      if (/\.(md|markdown)$/i.test(event.path)) await updateLinkGraphForFile(event.path, true).catch(() => {});
+    } else {
+      indexFile(event.path);
+      if (event.operation === 'rename' && oldPath) {
+        unindexFile(oldPath);
+        await qmd.rename(oldPath, event.path).catch(() => {});
+        await onFileRenamed(oldPath, event.path).catch(() => {});
+        if (/\.(md|markdown)$/i.test(oldPath)) await updateLinkGraphForFile(oldPath, true).catch(() => {});
+      } else if (/\.(md|markdown)$/i.test(event.path)) {
+        await qmd.upsert(event.path).catch(() => {});
+      }
+      if (/\.(md|markdown)$/i.test(event.path)) await updateLinkGraphForFile(event.path).catch(() => {});
+    }
+    scheduleAutoCommitOnSave();
+    broadcast({ type: 'syncChanged', latestSequence: event.sequence });
+    broadcast({ type: 'fs', event: event.operation, path: event.path });
+  });
 }
 
 // --- WebSocket: broadcast filesystem & UI-state events to connected clients ----
 // Auth-gated: the WS stream leaks vault structure (paths of created/changed/deleted
 // files), so the upgrade is rejected unless the request carries a valid session.
-function setupWebsocket(server: http.Server) {
+function setupWebsocket(server: http.Server, vaultId: string) {
   const wss = new WebSocketServer({ noServer: true });
+  const syncClients = new WeakSet<object>();
+  const syncClientsByDevice = new Map<string, Set<import('ws').WebSocket>>();
+  const alive = new WeakMap<object, boolean>();
+  registerSyncWebSocketDisconnect((deviceId) => {
+    for (const client of syncClientsByDevice.get(deviceId) ?? []) client.terminate();
+    syncClientsByDevice.delete(deviceId);
+  });
 
   server.on('upgrade', (req, socket, head) => {
     let pathname = '';
@@ -155,6 +225,35 @@ function setupWebsocket(server: http.Server) {
       pathname = new URL(req.url ?? '', 'http://localhost').pathname;
     } catch {
       pathname = '';
+    }
+    if (pathname === '/api/sync/v1/ws') {
+      const address = req.socket.remoteAddress ?? '';
+      const loopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
+      if (!loopback && req.headers['x-forwarded-proto'] !== 'https') {
+        socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      const ticket = new URL(req.url ?? '', 'http://localhost').searchParams.get('ticket') ?? '';
+      const deviceId = wsTickets.consume(ticket);
+      if (!deviceId) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      void (async () => {
+        const active = (await getSyncDeviceStore().list()).some((device) => device.deviceId === deviceId && !device.revokedAt);
+        if (!active) {
+          socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          syncClients.add(ws);
+          const clients = syncClientsByDevice.get(deviceId) ?? new Set(); clients.add(ws); syncClientsByDevice.set(deviceId, clients);
+          ws.on('close', () => { clients.delete(ws); if (!clients.size) syncClientsByDevice.delete(deviceId); });
+          wss.emit('connection', ws, req);
+        });
+      })();
+      return;
     }
     if (pathname !== '/ws') {
       socket.destroy();
@@ -172,12 +271,36 @@ function setupWebsocket(server: http.Server) {
   });
 
   wss.on('connection', (ws) => {
-    ws.send(JSON.stringify({ type: 'hello' }));
+    alive.set(ws, true);
+    ws.on('pong', () => alive.set(ws, true));
+    if (!syncClients.has(ws)) ws.send(JSON.stringify({ type: 'hello' }));
   });
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients) {
+      if (alive.get(client) === false) {
+        client.terminate();
+        continue;
+      }
+      alive.set(client, false);
+      client.ping();
+    }
+  }, 30_000);
+  heartbeat.unref();
+  server.on('close', () => clearInterval(heartbeat));
   setBroadcaster((msg) => {
     const data = JSON.stringify(msg);
     for (const client of wss.clients) {
-      if (client.readyState === 1) client.send(data);
+      if (client.readyState !== 1) continue;
+      if (client.bufferedAmount > 1024 * 1024) {
+        client.terminate();
+        continue;
+      }
+      if (syncClients.has(client)) {
+        if (msg && typeof msg === 'object' && 'type' in msg && msg.type === 'syncChanged'
+          && 'latestSequence' in msg && typeof msg.latestSequence === 'number') {
+          client.send(JSON.stringify({ type: 'sync.changed', vaultId, latestSequence: msg.latestSequence }));
+        }
+      } else client.send(data);
     }
   });
 }
@@ -218,6 +341,7 @@ function startWatcher(root: string, usePolling: boolean) {
     interval: 1000,
     binaryInterval: 3000,
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+    alwaysStat: true,
   });
 
   // On a fresh VPS the kernel's `fs.inotify.max_user_watches` is often far below
@@ -241,33 +365,66 @@ function startWatcher(root: string, usePolling: boolean) {
     console.error('[watcher] error:', err);
   });
 
-  const onChange = async (absPath: string, type: string) => {
+  const pendingUnlinks = new Map<string, { hash: string | null; inode?: number; kind: 'file' | 'directory'; timer: NodeJS.Timeout }>();
+  const knownInodes = new Map<string, number>();
+  const reconcile = async (rel: string, type: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir') => {
+    try { await getSyncCoordinator().reconcileExternalPath(rel, type); }
+    catch (error) { console.error(`[watcher] failed to reconcile ${type} ${rel}:`, error); }
+  };
+  const onChange = async (absPath: string, type: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir', stats?: Stats) => {
     const rel = path.relative(root, absPath).split(path.sep).join('/');
-    // keep the attachment/file index in sync for embed resolution
-    if (type === 'add') indexFile(rel);
-    else if (type === 'unlink') unindexFile(rel);
-    // Drop the cached mtime/ctime so the next listTree re-stats just this file.
-    invalidateStat(rel);
-    if (/\.(md|markdown)$/i.test(rel)) {
-      // Update only the changed file in the search + link indexes (O(1)) — a full
-      // buildLinkGraph() re-reads every note in the vault and was the main CPU sink
-      // when Obsidian touched files in the background.
-      if (type === 'unlink') {
-        qmd.remove(rel);
-        await updateLinkGraphForFile(rel, true).catch(() => {});
-      } else {
-        await qmd.upsert(rel).catch(() => {});
-        await updateLinkGraphForFile(rel).catch(() => {});
+    if (stats?.ino && type !== 'unlink' && type !== 'unlinkDir') knownInodes.set(rel, stats.ino);
+    if (type === 'unlink' || type === 'unlinkDir') {
+      const current = await getSyncCoordinator().entryByPath(rel);
+      const timer = setTimeout(() => {
+        pendingUnlinks.delete(rel);
+        void reconcile(rel, type);
+      }, 750);
+      pendingUnlinks.set(rel, {
+        hash: current?.hash ?? null,
+        ...(knownInodes.get(rel) ? { inode: knownInodes.get(rel) } : {}),
+        kind: type === 'unlinkDir' ? 'directory' : 'file',
+        timer,
+      });
+      knownInodes.delete(rel);
+      return;
+    }
+    if (type === 'add') {
+      const hash = await sha256Chunks(createReadStream(absPath)).catch(() => null);
+      const candidates = [...pendingUnlinks.entries()].filter(([, pending]) =>
+        pending.kind === 'file' && ((pending.inode && stats?.ino && pending.inode === stats.ino) || pending.hash === hash));
+      if (hash && candidates.length === 1) {
+        const [from, pending] = candidates[0]!;
+        clearTimeout(pending.timer);
+        pendingUnlinks.delete(from);
+        try {
+          await getSyncCoordinator().reconcileExternalRename(from, rel);
+          return;
+        } catch (error) {
+          console.warn(`[watcher] rename correlation ${from} → ${rel} rejected; using delete+create`, error);
+          await reconcile(from, 'unlink');
+        }
       }
     }
-    broadcast({ type: 'fs', event: type, path: rel });
+    await reconcile(rel, type);
   };
   watcher
-    .on('add', (p) => onChange(p, 'add'))
-    .on('change', (p) => onChange(p, 'change'))
+    .on('add', (p, stats) => onChange(p, 'add', stats))
+    .on('change', (p, stats) => onChange(p, 'change', stats))
     .on('unlink', (p) => onChange(p, 'unlink'))
-    .on('addDir', (p) => onChange(p, 'addDir'))
+    .on('addDir', (p, stats) => onChange(p, 'addDir', stats))
     .on('unlinkDir', (p) => onChange(p, 'unlinkDir'));
+
+  let driftScanRunning = false;
+  const driftInterval = Math.max(10_000, Number(process.env.SYNC_DRIFT_SCAN_MS ?? 60_000));
+  const driftTimer = setInterval(() => {
+    if (driftScanRunning) return;
+    driftScanRunning = true;
+    void getSyncCoordinator().reconcileExternalDrift()
+      .catch((error) => console.error('[watcher] periodic drift scan failed:', error))
+      .finally(() => { driftScanRunning = false; });
+  }, driftInterval);
+  driftTimer.unref();
 }
 
 async function dirExists(p: string): Promise<boolean> {

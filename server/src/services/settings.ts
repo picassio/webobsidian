@@ -17,7 +17,7 @@ const ApiKeySchema = z.object({
 });
 
 const SettingsSchema = z.object({
-  version: z.number().default(1),
+  version: z.literal(3).default(3),
   auth: z
     .object({
       // Mật khẩu người dùng đã đổi. Rỗng = đang dùng mật khẩu mặc định (123456).
@@ -41,6 +41,7 @@ const SettingsSchema = z.object({
   git: z
     .object({
       enabled: z.boolean().default(false),
+      mode: z.enum(['legacy-bidirectional', 'backup-only']).default('backup-only'),
       remote: z.string().default(''),
       branch: z.string().default('main'),
       token: z.string().default(''),
@@ -54,6 +55,10 @@ const SettingsSchema = z.object({
         .default(['*.png', '*.jpg', '*.jpeg', '*.gif', '*.pdf', '*.mp4', '*.mov', '*.zip']),
     })
     .default({}),
+  sync: z.object({
+    enabled: z.boolean().default(true),
+    bootstrapState: z.enum(['backup-required', 'ready']).default('ready'),
+  }).default({}),
   search: z
     .object({
       fuzzy: z.number().default(0.2),
@@ -140,9 +145,21 @@ export async function loadSettings(): Promise<Settings> {
   await ensureDataDir();
   try {
     const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
-    const parsed = SettingsSchema.parse(JSON.parse(raw));
+    const input = JSON.parse(raw) as Record<string, unknown>;
+    const sourceVersion = Number(input.version ?? 1);
+    const legacy = sourceVersion < 2;
+    if (legacy) {
+      const legacyGit = input.git && typeof input.git === 'object' ? input.git as Record<string, unknown> : {};
+      input.sync = { enabled: false, bootstrapState: 'backup-required' };
+      input.git = { ...legacyGit, mode: 'legacy-bidirectional' };
+    } else if (sourceVersion === 2) {
+      const priorSync = input.sync && typeof input.sync === 'object' ? input.sync as Record<string, unknown> : {};
+      input.sync = { ...priorSync, bootstrapState: priorSync.enabled === false ? 'backup-required' : 'ready' };
+    }
+    input.version = 3;
+    const parsed = SettingsSchema.parse(input);
     // Backfill secrets that may be empty in older files.
-    let dirty = false;
+    let dirty = sourceVersion < 3;
     if (!parsed.auth.jwtSecret) {
       parsed.auth.jwtSecret = randomBytes(48).toString('hex');
       dirty = true;
@@ -160,8 +177,21 @@ export async function loadSettings(): Promise<Settings> {
     if (ensureVaultBrowsable(parsed)) dirty = true;
     cache = parsed;
     if (dirty) await persist(cache);
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw new Error(`settings.json is invalid; refusing to replace it: ${error instanceof Error ? error.message : String(error)}`);
+    }
     cache = defaults();
+    const entries = await fs.readdir(cache.vault.path).catch((readError: NodeJS.ErrnoException) => {
+      if (readError.code === 'ENOENT') return [] as string[];
+      throw readError;
+    });
+    const existingVault = entries.some((entry) => !['.git', '.obsidian', '.trash'].includes(entry));
+    if (existingVault) {
+      cache.sync.enabled = false;
+      cache.sync.bootstrapState = 'backup-required';
+      cache.git.mode = 'legacy-bidirectional';
+    }
     await persist(cache);
   }
   return cache;

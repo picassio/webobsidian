@@ -48,7 +48,10 @@ export default function VersionHistory() {
     if (!selected) return;
     if (!confirm('Restore this version? The current content will be overwritten.')) return;
     try {
-      await api.write(path, preview);
+      const current = await api.read(path);
+      const baseRevision = typeof current === 'string' ? undefined : current.revision;
+      if (baseRevision === undefined) throw new Error('Current revision metadata is unavailable; restore was not applied');
+      await api.write(path, preview, baseRevision);
       if (path === activePath) await openFile(path);
       notify('Restored earlier version');
       close(null);

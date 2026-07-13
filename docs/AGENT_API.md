@@ -18,12 +18,20 @@ All `{path}` values are vault-relative (URL-encode slashes are fine, e.g. `Notes
 | GET | `/api/v1/health` | – | Liveness check |
 | GET | `/api/v1/notes?offset=&limit=` | read | List markdown notes (paginated) |
 | GET | `/api/v1/notes/{path}` | read | Read a note + parsed metadata |
-| PUT | `/api/v1/notes/{path}` | write | Create/overwrite a note (`{ "content": "..." }`) |
-| PATCH | `/api/v1/notes/{path}` | write | Append (`{ "append": "..." }`) |
-| DELETE | `/api/v1/notes/{path}` | write | Move note to trash |
+| PUT | `/api/v1/notes/{path}` | write | Revision-conditional create/update |
+| PATCH | `/api/v1/notes/{path}` | write | Revision-conditional append |
+| DELETE | `/api/v1/notes/{path}` | write | Revision-conditional move to trash |
 | GET | `/api/v1/search?q=&limit=` | search | QMD search |
 | GET | `/api/v1/backlinks?path=` | read | Notes linking to a path |
 | GET | `/api/v1/tags` | read | All tags with counts |
+
+## Safe write contract
+
+Every mutation requires a positive, monotonically increasing `clientSequence` per API key and an
+`idempotencyKey` (16–256 characters, reused unchanged only when retrying the exact same payload). Updating,
+appending, or deleting an existing note also requires its `baseRevision`, returned by `GET /notes/{path}`.
+Missing conditional metadata returns HTTP 428; a stale revision returns 409 and never overwrites current bytes.
+Creating a path that does not exist omits `baseRevision`.
 
 ## Examples
 
@@ -37,14 +45,15 @@ curl -H "X-API-Key: $KEY" "$BASE/notes?limit=10"
 # read a note
 curl -H "X-API-Key: $KEY" "$BASE/notes/Welcome.md"
 
-# create / update a note
+# create a new note
 curl -X PUT -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"content":"# From the agent\n\nHello vault."}' \
+  -d '{"content":"# From the agent\n\nHello vault.","clientSequence":1,"idempotencyKey":"agent-create-generated-0001"}' \
   "$BASE/notes/Agent/Generated.md"
 
-# append
+# append after GET reported revision 1
 curl -X PATCH -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"append":"\n- a new bullet"}' "$BASE/notes/Agent/Generated.md"
+  -d '{"append":"\n- a new bullet","baseRevision":1,"clientSequence":2,"idempotencyKey":"agent-append-generated-0002"}' \
+  "$BASE/notes/Agent/Generated.md"
 
 # search (fielded queries supported: tag:, path:, title:)
 curl -H "X-API-Key: $KEY" "$BASE/search?q=tag:idea%20graph&limit=5"
@@ -60,6 +69,9 @@ curl -H "X-API-Key: $KEY" "$BASE/backlinks?path=Welcome.md"
 {
   "path": "Welcome.md",
   "content": "...",
+  "entryId": "entry_...",
+  "revision": 7,
+  "hash": "sha256...",
   "title": "Welcome to WebObsidian",
   "frontmatter": { "tags": ["welcome"] },
   "tags": ["welcome", "getting-started"],

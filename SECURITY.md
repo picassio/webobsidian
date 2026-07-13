@@ -27,11 +27,19 @@ safely. Key points:
 - Master password is scrypt-hashed; the JWT secret is auto-generated.
 - API keys are hashed at rest and scoped (`read` / `write` / `search`) with per-key rate
   limiting.
-- File paths are guarded against traversal; the vault picker is confined to `ALLOWED_ROOTS`.
+- Central Sync requires HTTPS outside loopback. Pairing codes are high-entropy, single-use, and expiring;
+  per-device bearer secrets are scrypt-hashed at rest and immediately invalidated on revocation/rotation.
+- Browser sync credentials use an httpOnly, SameSite=Strict cookie with exact same-origin mutation checks; raw
+  device tokens never enter browser JavaScript/IndexedDB. Native/headless clients use platform secret storage or
+  a separate mode-0600 credential file outside the vault. Never copy credentials between devices.
+- File paths are guarded against traversal, case-fold collision, excluded namespaces, and symlink ancestors; the
+  vault picker is confined to `ALLOWED_ROOTS`. Blob uploads are owned, bounded, hash/size verified, and expiring.
 - Secrets (git token, API keys) live in `data/settings.json` on the server — mount `/data`
   as a private volume and keep it out of version control.
 - Run behind a TLS-terminating reverse proxy (set `HTTP_BIND=127.0.0.1`) for any
-  internet-facing deployment.
+  internet-facing deployment. Do not expose administrator health/doctor/metrics endpoints publicly.
+- Synchronization is telemetry-free. Diagnostics include operational counts/lag but must not include vault
+  content, raw credentials, pairing codes, credential-bearing URLs, or absolute filesystem paths.
 
 ## Supported versions
 

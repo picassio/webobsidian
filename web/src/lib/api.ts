@@ -1,4 +1,5 @@
 // Thin fetch wrapper around the WebObsidian server API.
+import { sha256Text } from '@webobsidian/sync-core';
 
 export interface TreeNode {
   name: string;
@@ -71,7 +72,8 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     let msg = res.statusText;
     try {
-      msg = (await res.json()).error ?? msg;
+      const payload = await res.json() as { error?: string | { message?: string } };
+      msg = typeof payload.error === 'string' ? payload.error : (payload.error?.message ?? msg);
     } catch {
       /* ignore */
     }
@@ -79,6 +81,24 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   }
   const ct = res.headers.get('content-type') ?? '';
   return (ct.includes('application/json') ? res.json() : (res.text() as unknown)) as Promise<T>;
+}
+
+async function syncDeviceFetch(path: string, opts: RequestInit = {}): Promise<Response> {
+  const response = await fetch(`/api/sync/v1${path}`, { credentials: 'include', ...opts });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: { message?: string } | string };
+    throw new ApiError(typeof payload.error === 'string' ? payload.error : (payload.error?.message ?? response.statusText), response.status);
+  }
+  return response;
+}
+
+async function syncDeviceReq<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  return req<T>(`/api/sync/v1${path}`, opts);
+}
+
+async function currentFileRevision(path: string): Promise<number> {
+  const entry = await req<{ revision: number }>(`/api/files/revision?path=${encodeURIComponent(path)}`);
+  return entry.revision;
 }
 
 export class ApiError extends Error {
@@ -108,19 +128,28 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
-    req<{ path: string; content: string }>(`/api/files/content?path=${encodeURIComponent(path)}`),
-  write: (path: string, content: string) =>
-    req<{ ok: true }>('/api/files/content', { method: 'PUT', body: JSON.stringify({ path, content }) }),
+    req<{ path: string; content: string; entryId?: string; revision?: number; hash?: string | null }>(
+      `/api/files/content?path=${encodeURIComponent(path)}`,
+    ),
+  write: (path: string, content: string, baseRevision?: number) =>
+    req<{ ok: true; entryId: string; revision: number; hash: string | null; path: string }>(
+      '/api/files/content',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ path, content, ...(baseRevision !== undefined ? { baseRevision } : {}) }),
+      },
+    ),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
-  rename: (from: string, to: string) =>
-    req<{ ok: true }>('/api/files/rename', { method: 'PATCH', body: JSON.stringify({ from, to }) }),
-  copy: (from: string, to: string) =>
-    req<{ ok: true }>('/api/files/copy', { method: 'POST', body: JSON.stringify({ from, to }) }),
-  remove: (path: string) =>
+  revision: (path: string) => req<{ entryId: string; path: string; kind: 'file' | 'directory'; revision: number; hash: string | null; size: number }>(`/api/files/revision?path=${encodeURIComponent(path)}`),
+  rename: async (from: string, to: string) =>
+    req<{ ok: true }>('/api/files/rename', { method: 'PATCH', body: JSON.stringify({ from, to, baseRevision: await currentFileRevision(from) }) }),
+  copy: async (from: string, to: string) =>
+    req<{ ok: true }>('/api/files/copy', { method: 'POST', body: JSON.stringify({ from, to, baseRevision: await currentFileRevision(from) }) }),
+  remove: async (path: string) =>
     req<{ ok: true; trashed?: string; deleted?: string }>(
       `/api/files/?path=${encodeURIComponent(path)}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', body: JSON.stringify({ baseRevision: await currentFileRevision(path) }) },
     ),
   // trash (FR-1)
   listTrash: () => req<{ items: TrashItem[] }>('/api/files/trash'),
@@ -136,6 +165,9 @@ export const api = {
   upload: async (file: File, dir = 'attachments') => {
     const fd = new FormData();
     fd.append('dir', dir);
+    const target = `${dir.replace(/^\/+|\/+$/g, '')}/${file.name}`;
+    const existingRevision = await currentFileRevision(target).catch((error) => error instanceof ApiError && error.status === 404 ? null : Promise.reject(error));
+    if (existingRevision !== null) fd.append('baseRevision', String(existingRevision));
     fd.append('file', file);
     const res = await fetch('/api/files/upload', { method: 'POST', credentials: 'include', body: fd });
     if (!res.ok) throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
@@ -176,7 +208,52 @@ export const api = {
     }>('/api/graph'),
   reindex: () => req<{ ok: true }>('/api/reindex', { method: 'POST' }),
 
-  // ui state (workspace persistence, shared across browsers)
+  // Central Sync administration and browser pairing
+  createSyncPairingCode: (deviceNameHint: string) =>
+    req<{ protocolVersion: string; code: string; expiresAt: string }>('/api/sync/v1/pairing-codes', {
+      method: 'POST', body: JSON.stringify({ deviceNameHint }),
+    }),
+  createBrowserSyncDevice: (deviceId: string, deviceName: string) =>
+    req<{ protocolVersion: string; vaultId: string; deviceId: string }>('/api/sync/v1/browser-devices', {
+      method: 'POST', body: JSON.stringify({ deviceId, deviceName }),
+    }),
+  upgradeBrowserSyncDevice: (token: string) => req<{ protocolVersion: string; deviceId: string }>('/api/sync/v1/browser-device/upgrade', {
+    method: 'POST', body: JSON.stringify({ token }),
+  }),
+  clearBrowserSyncDevice: () => req<void>('/api/sync/v1/browser-device/logout', { method: 'POST', body: '{}' }),
+  pairSyncDevice: (code: string, deviceId: string, deviceName: string) =>
+    req<{ protocolVersion: string; vaultId: string; deviceId: string; token: string }>('/api/sync/v1/pair', {
+      method: 'POST', body: JSON.stringify({ protocolVersion: '1.0', code, deviceId, deviceName }),
+    }),
+  syncHealth: () => req<any>('/api/sync/v1/health'),
+  syncDoctor: () => req<any>('/api/sync/v1/doctor'),
+  syncDevices: () => req<{ protocolVersion: string; devices: any[] }>('/api/sync/v1/devices'),
+  revokeSyncDevice: (deviceId: string) => req<{ ok: true }>(`/api/sync/v1/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+  syncConflicts: () => syncDeviceReq<{ protocolVersion: string; conflicts: any[] }>('/conflicts'),
+  syncRevisionText: async (entryId: string, revision: number) =>
+    (await syncDeviceFetch(`/files/${encodeURIComponent(entryId)}?revision=${revision}`)).text(),
+  downloadSyncBlob: async (hash: string, filename: string) => {
+    const blob = await (await syncDeviceFetch(`/blobs/${encodeURIComponent(hash)}`)).blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename; anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  },
+  resolveSyncConflict: (conflictId: string, resolution: 'keep-server' | 'keep-client' | 'merged' | 'copy', clientSequence: number, mergedContent?: string) =>
+    syncDeviceReq<any>(`/conflicts/${encodeURIComponent(conflictId)}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        protocolVersion: '1.0', clientSequence, resolution,
+        idempotencyKey: `web-resolve-${crypto.randomUUID()}`,
+        ...(mergedContent !== undefined ? { mergedContent: {
+          hash: sha256Text(mergedContent),
+          size: new TextEncoder().encode(mergedContent).byteLength,
+          inlineText: mergedContent,
+        } } : {}),
+      }),
+    }),
+
+  // Legacy one-time source for migrating shared workspace state into per-device IndexedDB.
   getUiState: () => req<any>('/api/uistate/'),
   putUiState: (state: any, clientId: string) =>
     req<{ ok: true }>('/api/uistate/', {
@@ -203,6 +280,11 @@ export const api = {
   gitPush: () => req<{ message: string }>('/api/git/push', { method: 'POST' }),
   gitSync: (message?: string) =>
     req<{ ok: boolean; log: string[] }>('/api/git/sync', { method: 'POST', body: JSON.stringify({ message }) }),
+  gitMigration: () => req<any>('/api/git/migration'),
+  migrateGitToBackup: (confirm: boolean, allowLocalOnlyBackup = false) =>
+    req<any>('/api/git/migration', { method: 'POST', body: JSON.stringify({ confirm, allowLocalOnlyBackup }) }),
+  gitImport: (confirm: boolean, deleteMissing = false) =>
+    req<any>('/api/git/import', { method: 'POST', body: JSON.stringify({ confirm, deleteMissing }) }),
   gitLog: (path: string) =>
     req<{ commits: GitCommit[] }>(`/api/git/log?path=${encodeURIComponent(path)}`),
   gitShow: (hash: string, path: string) =>

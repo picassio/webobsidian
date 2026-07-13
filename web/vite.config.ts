@@ -10,25 +10,19 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          codemirror: [
-            '@codemirror/state',
-            '@codemirror/view',
-            '@codemirror/commands',
-            '@codemirror/language',
-            '@codemirror/lang-markdown',
-            '@codemirror/theme-one-dark',
-          ],
-          markdown: [
-            'unified',
-            'remark-parse',
-            'remark-gfm',
-            'remark-rehype',
-            'rehype-raw',
-            'rehype-sanitize',
-            'rehype-stringify',
-          ],
-          react: ['react', 'react-dom'],
+        // Rolldown (Vite 8) accepts a function here, unlike Rollup's legacy
+        // object form. Keep the same stable vendor boundaries without pinning
+        // every transitive dependency to a chunk.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          const cmPackages = [
+            '@codemirror/state', '@codemirror/view', '@codemirror/commands',
+            '@codemirror/language', '@codemirror/lang-markdown', '@codemirror/theme-one-dark',
+          ];
+          if (cmPackages.some((pkg) => id.includes(`/node_modules/${pkg}/`))) return 'codemirror';
+          if (/\/node_modules\/(unified|remark-|rehype-)/.test(id)) return 'markdown';
+          if (/\/node_modules\/(react|react-dom)\//.test(id)) return 'react';
+          return undefined;
         },
       },
     },

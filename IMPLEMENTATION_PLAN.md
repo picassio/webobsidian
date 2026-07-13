@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-22 (Fix Graph view trắng + lỗi `unsafe-eval` trên host CSP: import `pixi.js/unsafe-eval` trước `app.init()` trong `GraphView.tsx`)
+Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin prerelease public; npm/GHCR, real platform matrices, alpha/beta/stable, and Community acceptance remain externally gated)
 
 ---
 
@@ -404,7 +404,478 @@ Cập nhật lần cuối: 2026-06-22 (Fix Graph view trắng + lỗi `unsafe-ev
 - [x] M26.4 Reading view (Preview.tsx) click `<img>` → `openLightbox(currentSrc, alt)`; CSS handle resize
       (`.cm-image-resize`) + `.image-lightbox*` + cursor `zoom-in`. Typecheck sạch.
 
+## Phase 31 — Central Sync architecture & contract gate — FR-13
+- [x] M31.1 Audit sync hiện tại: xác nhận Git chỉ là eventual repository replication; WebSocket `fs` chỉ
+      reload tree, open note có thể stale; write không revision/ETag và autosave có generation race.
+- [x] M31.2 Bump PRD 1.5, thêm FR-13 + NFR/API/data model/DoD; viết roadmap chi tiết
+      `docs/SYNC_ROADMAP.md` cho server, web, native plugin, headless client, Git transition và release.
+- [x] M31.3 Chốt decision record trong roadmap/PRD: all normal vault files nhưng exclude toàn bộ `.obsidian`
+      v1; clean diff3 else conflict-copy; trusted HTTPS/no E2EE; plugin repo riêng; JSON journal + WAL intents;
+      Git backup-only; workspace per-device; current+previous protocol minor; headless npm/systemd/Docker.
+- [x] M31.4 Định nghĩa protocol `1.0` bằng shared TypeScript + JSON Schema/OpenAPI: auth matrix,
+      handshake, snapshot manifest, changes/ack, exact revisions/resumable blobs, operations/conflicts/devices;
+      current+previous minor negotiation, canonical HTTP/error/result fields và limits advertised.
+- [x] M31.5 Viết conflict matrix đầy đủ trong roadmap: create collision, text/binary modify, delete/modify,
+      tombstone, rename/modify/rename, directory subtree/rmdir, case-only rename + deterministic result.
+- [x] M31.6 Threat model + abuse limits trong roadmap: trust boundary, pairing/token/replay, path/symlink/case,
+      blob/quota, CSRF/WS ticket, journal tamper/crash, compromised device, DoS, HTTPS và redaction.
+- [x] M31.7 Tạo protocol fixtures/conformance harness dùng chung: golden request/response, event replay,
+      cross-version compatibility; CI chạy cho server, web adapter, plugin và headless.
+
+## Phase 32 — Sync metadata store, ordered journal & recovery — FR-13
+- [x] M32.1 Tạo `packages/sync-core`: branded protocol types, stable entryId, NFC/case-collision path policy,
+      SHA-256 streaming, sequence/revision, diff3/conflict, idempotency, local apply-intent/offline queue engine,
+      error/result types; platform adapters tách DOM/Node/Obsidian.
+- [x] M32.2 Tạo `data/sync/vault.json` với stable `vaultId`, `currentSequence`, `schemaVersion`; migration
+      idempotent, file mode an toàn, atomic write + backup/checksum.
+- [x] M32.3 Revision store `revisions.json`: stable entryId qua rename, normalized path,
+      file/directory revision/hash/size/mtime/sequence, tombstone/previousHash; bootstrap scan
+      snapshot-consistent, incremental/bounded cho vault hiện có.
+- [x] M32.4 Segmented JSON journal + write-ahead transaction intents: active segment atomic rewrite/fsync,
+      sealed immutable; commit point = committed event; startup finish/rollback intent ở mọi crash boundary,
+      rebuild snapshot/idempotency sau commit; corruption → degraded read-only, không silent truncate.
+- [x] M32.5 Retained merge bases + blob store content-addressed; retention theo age/count/ref, streaming
+      read/write, SHA-256 verify, dedupe, Range download và bounded memory cho file 1GB.
+- [x] M32.6 Idempotency store bounded theo device/clientSequence/key; duplicate retry trả nguyên kết quả,
+      out-of-order/reused key bị reject rõ ràng.
+- [x] M32.7 Tombstone/base/blob retention + compaction chỉ khi không phá active cursor; cursor expired trả
+      `410` buộc manifest reconcile; backup metadata trước compact.
+- [x] M32.8 `sync doctor` server-side: verify journal continuity/checksum, revisions↔filesystem hashes,
+      tombstone, orphan blob/base, schema; repair safe issues và degraded/read-only mode cho corruption.
+- [x] M32.9 Unit/property/crash-injection tests cho sequence, revision, rotation, replay, migration,
+      compaction, idempotency và interrupted process.
+
+## Phase 33 — SyncCoordinator: một mutation authority cho toàn bộ vault — FR-13
+- [x] M33.1 Implement coordinator với per-path/directory locks + global journal commit lock; canonical
+      operations create/modify/rename/delete/mkdir/rmdir/copy/trash/restore/import.
+- [x] M33.2 Conditional mutation: require `baseRevision`, stale trả 409 có base/current/submitted metadata;
+      text clean three-way merge, overlap/binary/delete-vs-modify tạo conflict-copy, không silent overwrite.
+- [x] M33.3 Commit pipeline crash-safe: lock/validate → stage previous+new + fsync WAL intent → materialize
+      atomic/fsync → atomic journal event commit point → rebuildable snapshots/idempotency → publish/delete intent;
+      recovery finish-or-rollback deterministic ở mỗi failure point, success chỉ sau commit point.
+- [x] M33.4 Chuyển web file routes (write/create/upload/rename/copy/delete/trash/restore) qua coordinator;
+      giữ response legacy tạm thời nhưng thêm revision/hash/ETag.
+- [x] M33.5 Chuyển Agent API write/append/delete qua coordinator; thêm conditional write contract và
+      compatibility warning/feature flag trước khi buộc base revision.
+- [x] M33.6 Chuyển Git restore/import và mọi internal mutation path qua coordinator; code search/CI guard
+      không cho route/service gọi `vault.write*/rename/remove` trực tiếp ngoài adapter được phép.
+- [x] M33.7 Event subscribers thống nhất cho QMD, links graph, file index, shares rename, stat cache,
+      tree/Sync WebSocket và Git backup scheduler; bỏ duplicate reindex logic trong route.
+- [x] M33.8 Watcher reconcile external filesystem edit: stable write + hash compare; coordinator write
+      suppression theo `(path,hash)`; periodic drift scan; inode/hash heuristic cho rename, fallback delete+create.
+- [x] M33.9 E2E hai writer + direct filesystem: mọi create/modify/rename/delete chain tạo đúng revision/event;
+      inject crash không mất accepted write và không publish phantom event.
+
+## Phase 34 — Sync API, device auth, pairing & blob transport — FR-13
+- [x] M34.1 Device model + dedicated `sync` scope: one-time pairing code random/hash/TTL/single-use,
+      high-entropy token chỉ hiện một lần, hash at rest, list/revoke/lastSeen/audit.
+- [x] M34.2 Routes `/api/sync/v1/pairing-codes|pair|handshake|ws-tickets`: auth matrix admin/device,
+      protocol current+previous minor, vault identity/limits/latest sequence, one-use 60s WS ticket,
+      incompatible-major/client-too-old errors.
+- [x] M34.3 Snapshot-consistent paginated `/manifest`, ordered `/changes?after&limit` và `/ack`: bounded
+      response, per-device durable cursor, retention/410 behavior, filtering policy và exact revision metadata.
+- [x] M34.4 `/files` exact entryId/revision + ETag/Range; blob HEAD/download và resumable
+      `/blob-uploads/{id}/{part}/complete`: 8MiB chunks, quota/size/hash, 24h incomplete cleanup, dedupe.
+- [x] M34.5 `/operations` ordered non-atomic batch: token-bound device/client sequence, idempotency,
+      stable entryId/base revisions, dependency links + 424, independent path continuation; canonical result
+      map accepted/merged/conflict/rejected và destination/case collision.
+- [x] M34.6 `/conflicts` list/show/resolve và `/devices` management; resolve options server/client/merged/copy,
+      mọi resolve tự tạo normal revision/event.
+- [x] M34.7 Extend authenticated `/ws` bằng `sync.changed {vaultId,latestSequence}`; backpressure/heartbeat/
+      reconnect; content không truyền qua WS, REST feed vẫn là source of truth.
+- [x] M34.8 Security middleware: HTTPS non-loopback policy, rate/body/stream limits, normalized UTF-8 path,
+      reject internal/.git/traversal/symlink, token/signed URL redaction, audit metadata không log content.
+- [x] M34.9 API integration/conformance tests: auth/revoke, expired pair, duplicate/reordered retry,
+      malformed blob/path, traversal/symlink, cursor expiry, protocol rolling upgrade.
+
+## Phase 35 — Web client revision-safe sync & conflict UX — FR-13
+- [x] M35.1 Store per-document state theo path/tab (`content`, `revision`, `hash`, `dirtyGeneration`,
+      `saveGeneration`, pending/error) thay global content/dirty duy nhất; migration workspace không mất tab.
+- [x] M35.2 Sửa autosave race: serialize per-document saves, capture generation+base revision, chỉ clear dirty
+      khi generation hiện tại khớp; test latency/out-of-order response/navigation/unmount.
+- [x] M35.3 API client đọc revision/ETag và conditional save; 409 giữ nguyên local draft, không hydrate đè,
+      fetch base/current cho merge flow.
+- [x] M35.4 Sync connection engine: handshake/cursor, one-use WS ticket wake-up → ordered REST catch-up/ack,
+      fallback poll + reconnect backoff; IndexedDB persist browser device/cursor/apply-intent/offline queue/draft;
+      clean open file auto apply ≤2s, dirty file conflict state.
+- [x] M35.5 Conflict UI: side-by-side/base-current-local diff, keep server/keep local/save merged/create copy;
+      binary metadata/download; unresolved badge/toast không chặn file khác.
+- [x] M35.6 Settings → Sync: pairing codes, device list/last seen/revoke, conflict center, journal/doctor health,
+      scope/exclude policy và diagnostics export redacted.
+- [x] M35.7 Status UI `Synced/Syncing/Offline/Conflict/Error` + sequence lag; tách hoàn toàn Git backup status.
+- [x] M35.8 Đổi `uistate.json` sang per-device workspace mặc định; migration từ shared state; mobile drawer/
+      clipboard vẫn local; không còn thiết bị A tự chuyển tab thiết bị B.
+- [x] M35.9 Browser×browser E2E: same/different note concurrent edits, stale open note, offline queue,
+      reconnect, rename/delete, 1GB attachment stream, crash/reload giữa save; không silent overwrite.
+
+## Phase 36 — Native Obsidian community plugin — FR-13
+- [x] M36.1 Tạo public repo riêng `central-vault-sync` từ sample plugin; manifest id unique không chứa
+      `obsidian`, README/LICENSE/versions/privacy/network behavior; desktop+mobile (`isDesktopOnly:false`).
+- [~] M36.2 Publish/version public `@webobsidian/sync-core` package + protocol conformance fixtures; plugin
+      adapter dùng Obsidian Vault text/binary API, `requestUrl`, one-use-ticket WebSocket và lifecycle registerEvent.
+- [x] M36.3 Pair/settings: server URL test, SecretStorage token, device name, pair/unpair, stricter client
+      excludes (không override `.obsidian/.git/.trash`), fallback poll, mobile confirm ≥100MiB; raw token
+      không vào `data.json` hay vault.
+- [x] M36.4 Local engine: durable cursor + apply intents + pending offline queue, per-path modify debounce,
+      create/rename/delete/subtree resume, binary chunk batches, idempotent push, ordered pull/ack; không advance
+      cursor khi local apply còn uncertain.
+- [x] M36.5 Remote apply echo suppression theo expected `(path,hash,revision)`; không dùng timing flag;
+      handle Obsidian event burst, case-only rename, Unicode normalization và file đang mở.
+- [x] M36.6 Plugin UX: status bar, Notice/commands Sync now/Pause/Status/Conflicts/Reconnect/Reset state,
+      conflict view/resolve và redacted diagnostics export.
+- [~] M36.7 Mobile lifecycle: catch-up on load/focus/resume, persist queue/cursor trước yield, bounded batch/memory,
+      rõ ràng không hứa background khi suspended; Android/iOS interruption tests.
+- [~] M36.8 Plugin test harness/mock Vault + protocol conformance; manual matrix Windows/macOS/Linux,
+      Android/iOS; no Node/Electron API để qua mobile policy.
+- [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
+      attach `main.js`, `manifest.json`, optional `styles.css`; private alpha + public beta.
+- [ ] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
+      feedback bằng version mới; verify cài/update trực tiếp từ Community Plugins.
+
+## Phase 37 — Linux headless CLI/daemon & sidecar — FR-13
+- [x] M37.1 Tạo `clients/headless` npm package có `bin: web-vault-sync`; filesystem adapter + shared sync-core,
+      Node ≥20, config/state/credential nằm ngoài vault và mode file 0600.
+- [x] M37.2 Commands `init/pair/sync/watch/pull/push/status --json/conflicts/doctor/reset`; stable exit codes,
+      non-interactive flags, redacted logs và shell completion/help.
+- [x] M37.3 Local watcher chokidar native + polling fallback, stable write/hash, echo suppression,
+      per-vault single-instance lock, case/Unicode/symlink handling.
+- [x] M37.4 Daemon engine: ordered pull/ack, durable local apply intents + offline push queue, idempotent retry,
+      reconnect exponential+jitter, graceful SIGTERM; exact modes bidirectional, pull-only restore/quarantine drift,
+      push-only metadata/conflict without remote content apply, one-shot durable boundary.
+- [x] M37.5 Conflict CLI list/show/resolve + conflict-copy mặc định; `doctor` verify local state/cursor/hash,
+      server reachability/protocol/token và safe reset không xoá file.
+- [x] M37.6 Tested systemd `Type=simple` unit/install docs: dedicated user, EnvironmentFile/systemd
+      credentials, network-online, restart policy + CLI doctor (không claim sd_notify watchdog v1);
+      test reboot/network outage/permission failure.
+- [x] M37.7 Sidecar Docker image non-root: bind vault + state, read-only secret, healthcheck, graceful stop;
+      publish amd64/arm64; compose/Kubernetes examples.
+- [~] M37.8 Headless E2E Linux/macOS + amd64/arm64: two daemon clients, browser/plugin interop,
+      offline/restart/crash, large binary bounded memory; npm package/signing/SBOM release.
+
+## Phase 38 — Git transition: backup/version history, không live sync — FR-4/FR-13
+- [x] M38.1 Rename Settings/Ribbon/status/docs từ “GitHub Sync” thành “Git Backup & Version History” khi
+      Central Sync mode bật; migration không xoá remote/token/history.
+- [x] M38.2 Backup-only single-writer mode: coordinator committed events debounce commit/push snapshot;
+      không remote pull vào live vault, retry/backoff độc lập và không block sync acceptance.
+- [x] M38.3 Explicit Git import/restore: fetch/preview changed paths/conflicts, admin confirm, apply qua coordinator
+      thành normal revisions/events; rollback/recovery test.
+- [x] M38.4 Legacy bidirectional Git mode được giữ cho installation không bật Central Sync, có warning và
+      mutual exclusion cứng; migration assistant kiểm tra clean repo/backup rồi chuyển backup-only, không có
+      hidden force-push/pull bypass trong stable FR-13.
+- [x] M38.5 Giữ Git LFS cho backup storage nhưng live attachment đi blob protocol; status/log UI tách backup lag
+      khỏi sync lag/conflict; secret redaction regression tests.
+
+## Phase 39 — Hardening, scale, migration & operations — FR-13
+- [x] M39.1 Migration first-start cho vault hiện có: full backup prompt, bootstrap hash/index resumable,
+      no mutation until ready, rollback metadata without touching vault files.
+- [x] M39.2 Scale benchmark 10k note/50k file/high churn, manifest pagination, catch-up <500ms LAN,
+      clean update ≤2s, 1GB bounded-memory transfer; document hardware/results.
+- [x] M39.3 JSON journal scalability review: segment/compaction/retention tune; nếu không đạt NFR thì dừng,
+      cập nhật PRD/changelog trước khi cân nhắc storage engine khác.
+- [x] M39.4 Fault-injection campaign: kill process/network/disk-full/permission at every commit boundary,
+      malformed metadata, missed watcher, clock skew; prove recovery/read-only behavior.
+- [x] M39.5 Security review: auth/pair/revoke/replay, traversal/symlink, malicious plugin/client, blob quota/hash,
+      dependency/secret scan, privacy disclosure; fix mọi critical/high.
+- [x] M39.6 Observability: sequence/device lag, accepted/dedup/reject/conflict ops, bytes/dedupe, drift repairs,
+      journal/compaction/backup status; authenticated sync health + diagnostics format chung.
+- [x] M39.7 Backup/restore drills: restore vault + `data/sync`, rebuild metadata từ vault, cursor expiry reconcile,
+      lost device revoke, conflict recovery; operator runbook.
+
+## Phase 40 — Alpha, beta, stable release & support — FR-13
+- [x] M40.1 Server technical preview gate: revision/journal/coordinator/API/browser complete, simulated clients,
+      no known silent overwrite, crash/conformance/security baseline pass.
+- [ ] M40.2 Private alpha: native desktop plugin + headless daemon sync Markdown/attachments/offline/rename/delete;
+      collect protocol/diagnostic feedback, migration tested on copied real vaults.
+- [ ] M40.3 Public beta: mobile foreground catch-up, all client pair matrix, docs/systemd/Docker, Git transition,
+      telemetry-free diagnostics, no open critical/high data-loss/security bug.
+- [ ] M40.4 Stable server release: compatibility/migration/rollback docs, signed artifacts/SBOM, Docker multi-arch,
+      upgrade preserves vault and Git history; recovery drills recorded.
+- [ ] M40.5 Publish headless npm package + amd64/arm64 image and examples; verify clean Linux server install,
+      systemd boot, sidecar health and unattended upgrade.
+- [ ] M40.6 Community plugin approval/installability + support docs: pairing, mobile limitations, conflicts,
+      privacy, troubleshooting, compatibility matrix and responsible disclosure.
+
 ### Nhật ký tiến độ
+- 2026-07-13 (M31.7 adapter/cross-version conformance complete): added browser-cookie and headless-bearer
+  transport tests that consume the same Protocol 1.0 golden handshake/manifest/change/operation transcript and
+  verify transport-specific credentials. Their initial future-version tests correctly exposed a real gap: shared
+  response schemas accepted any numeric version even though server requests fail closed. ProtocolVersionSchema
+  now requires exact `1.0`; 27 JSON Schemas regenerated and sync-core bumped coherently to 0.1.1 across server,
+  web and headless. Browser 11/11, headless 9/9 (including 1 GiB), core 14/14 and all-workspace typecheck pass.
+  Plugin updated its packed immutable 0.1.1 core artifact, added future-response rejection, fixed explicit bearer
+  credential typing, and passes policy/build/8 tests. Plugin commit/tag `64dce06`/0.1.2, release CI 29226806432,
+  provenance and public assets: https://github.com/picassio/central-vault-sync/releases/tag/0.1.2. Server route
+  tests preserve canonical HTTP 426 negotiation by detecting a well-formed unsupported request version before
+  exact schema parsing; plugin CI and root CI now cover every named adapter. The final packed core tarball is
+  byte-identical (SHA-512) to the plugin vendor artifact. Fresh aggregate validation: core 14/14, server 88/88,
+  browser 11/11, headless 9/9 including 1 GiB, typecheck/build, OpenAPI, audit zero and diff-check all pass. The
+  final version-coherent server Docker image also rebuilt and reached healthy with writable initialized Sync.
+  M31.7 complete.
+- 2026-07-13 (Server container release-path repair): a clean root `docker build` exposed that the staged
+  manifests omitted `clients/headless` and `packages/sync-core`, so npm installed an incomplete workspace and
+  the image could not compile. Dockerfile now copies every workspace manifest before reproducible `npm ci`, and
+  copies built sync-core runtime artifacts into the final image. The next smoke exposed `localhost` resolving to
+  IPv6 while the server listens IPv4; healthcheck now targets `127.0.0.1`. A second clean build completed all four
+  workspace builds with zero install vulnerabilities, and the mounted production container booted writable with
+  Sync initialized and reached Docker `healthy` with a successful `/healthz` payload. M40.4 remains partial only
+  because the stable multi-arch GHCR image cannot be published without the release commit/tag/token scope.
+- 2026-07-13 (Real Obsidian desktop + plugin 0.1.1): discovered that prerelease 0.1.0 required future
+  Obsidian 1.13 APIs while latest stable is 1.12.7. Reworked settings/reset UI off 1.13-only APIs and set the
+  SecretStorage-correct minimum 1.11.4; policy/type/lint/build and 8/8 mock/conformance tests pass. Installed the
+  built plugin into a real isolated Obsidian Linux 1.12.7 vault, accepted trust, verified plugin/status/settings,
+  paired to a fresh production server, pushed a Vault-created Markdown note (device actor sequence 1), applied a
+  remote revision back through Vault, then killed server, created offline work, verified durable path state/no
+  token in data.json, hard-killed Obsidian, restarted server/app, and converged queue/cursor to sequence 3. Evidence
+  screenshot: `docs/sync/evidence/obsidian-linux-1.12.7-plugin.png`. Commit `e99a1dc` and tag 0.1.1 were pushed;
+  release CI run 29226026213 succeeded with provenance and 0.1.1 assets are public prerelease at
+  https://github.com/picassio/central-vault-sync/releases/tag/0.1.1. Xvfb host exposed Obsidian's no-keychain
+  SecretStorage warning; README/SECURITY/root compatibility now explicitly disclose that platform encryption
+  requires a working OS keychain (docs commit `6c90561`) rather than making a hidden guarantee. M36.9 complete;
+  M36.7/M36.8 remain partial
+  only for real Android/iOS/Windows/macOS matrices, M36.10 remains account/reviewer gated.
+- 2026-07-13 (Headless arm64 execution evidence): built the final non-root image specifically for linux/arm64,
+  registered binfmt/QEMU, and executed `help` plus persistent-volume `init --json` successfully under emulation;
+  image inspection reports `arm64/linux` and user `node`. Multi-arch build is therefore not compile-only, though
+  M37.8 remains `[~]` until real macOS and plugin/client-pair host matrices run.
+- 2026-07-13 (M37.6 actual systemd host drill): beyond `systemd-analyze verify`, installed the built CLI into
+  a disposable root-owned runtime, created the dedicated `web-vault-sync` system user/state/vault, paired it to
+  a fresh production server, loaded its token through systemd `LoadCredential`, and started the shipped hardened
+  Type=simple unit with vault `ReadWritePaths` drop-in. Unit reached `active` with a real MainPID and stopped
+  cleanly on systemd SIGTERM (`Deactivated successfully`); service/runtime/user artifacts were removed afterward.
+  M37.6 is complete.
+- 2026-07-13 (M40.1 technical preview + release prep): removed every unrevisioned existing-entry compatibility
+  fallback. Web rename/copy/delete/upload preflight exact revisions; plugin shim modify is conditional; Agent API
+  always requires monotonic sequence/idempotency and base on existing note (428 missing, 409 stale). PRD v1.6,
+  roadmap, Agent docs/skill synchronized. Fresh root tests 14 sync-core + 88 server + 9 web + 7 headless,
+  full typecheck/build, OpenAPI/audit/diff, and two-browser E2E pass with no known silent overwrite or open
+  critical/high. Added publishable sync-core README/LICENSE/metadata, compatibility/upgrade/rollback/mobile/privacy
+  guide, and tag-gated release workflow with full gates, npm provenance, CycloneDX SBOM, checksums, GitHub
+  attestations/releases, and multi-arch GHCR SBOM/provenance. Thus M40.1 local technical-preview gate is complete;
+  alpha/beta/stable external gates remain open.
+- 2026-07-13 (Plugin/headless artifact evidence): published plugin 0.1.0 as an explicit GitHub prerelease (not
+  draft) with downloadable `main.js`, `manifest.json`, `styles.css`; remote release and CI both verified, downloaded
+  SHA-256 values match. Community submission now requires the user's linked Obsidian account at
+  community.obsidian.md and reviewer acceptance. Headless non-root image rebuilt, user/CLI/init/healthcheck smoke
+  passed; amd64+arm64 SBOM/provenance build completed but GHCR push was denied because the available token lacks
+  package write scope. npm `whoami` is 401, so sync-core/headless npm publication is credential-blocked. M37.7
+  implementation gate is complete; M40.5 publication remains open.
+- 2026-07-13 (M35.9 hoàn tất): added repeatable Playwright/real-Chromium `npm run test:e2e:browser` with two
+  isolated browser contexts and production server. It verifies different-note concurrent acceptance, same-note
+  stale-base durable conflict, an open overlapping local draft survives remote revision, resumable binary blob
+  + attachment projection, durable offline queue across page destruction/reopen and reconnect, injected durable
+  apply-intent recovery before cursor catch-up, stable-identity rename/delete convergence, and httpOnly identity
+  (no token in IndexedDB or `document.cookie`). Shared 1GiB stream/hash and real 128-chunk HTTP transfer remain
+  bounded below 128MiB. CI now runs unit/fault/scale/recovery tests, OpenAPI, audit, build, installs Chromium, and
+  runs this E2E; local browser-pair run passes.
+- 2026-07-13 (Phase 38 + Phase 39 local gates hoàn tất): settings schema v3 fails closed on corruption,
+  existing-vault first start sets `backup-required` + Central disabled; empty installs are ready. Pairing remains
+  blocked until confirmed full Git backup migration. Bootstrap now resumes from checksummed 5k-entry checkpoints,
+  preserves IDs/reuses unchanged hashes, and never changes vault bytes. Real production drill used an existing
+  vault + empty bare remote: preview clean, full snapshot commit/push succeeded, state atomically became
+  `ready + backup-only`, remote commit verified, post-migration pull returned 409, graceful SIGTERM checkpointed.
+  M38.4 old/new settings tests plus explicit local-only/remote/conflict guards and no force/pull complete.
+- 2026-07-13 (Phase 39 scale/fault/security/ops): identified and removed the 50k-entry full projection rewrite
+  from every write; journal remains authority while O(1) id/path projection is maintenance/shutdown checkpointed
+  and replayed after crash. Reference results in `docs/sync/SCALABILITY.md`: 50k manifest 7.7ms, 50k projection
+  update 1.4ms, 500 catch-ups 11.7ms, 1GiB hash +25.5MiB RSS and real 1GiB/128-chunk HTTP upload +86.9MiB.
+  Daily acknowledgement+age-gated compaction now runs, checkpoints even when blocked, protects unresolved
+  conflict base/current/client blobs, expires uploads, reports backup/journal/maintenance status. ENOSPC at all
+  precommit boundaries rolls back and retries; post-commit ENOSPC converges before success; six hard-crash points,
+  future clock skew, watcher miss, malformed metadata, permission/symlink escape and network/apply failure pass.
+  Security review fixed raw browser token storage, exact cookie CSRF, pre-auth CPU rate limit/map bound, symlink
+  ancestors, corrupt-settings replacement, Git credential disclosure, post-commit ambiguity, and immediate WS
+  revoke/rotation; audit and secret scan clean. Authenticated health/Prometheus metrics expose sequence/device/index
+  lag, op outcomes/dedup/conflicts/latency, bytes/dedupe/drift, journal/maintenance/Git status and alerts. Exact
+  vault+data restore and vault-only rebuild drills pass; cursor/revoke/conflict recovery tests and full
+  `docs/sync/OPERATIONS.md` runbook complete. Fresh server suite 87/87, web 9/9, headless 7/7, plugin 8/8,
+  typechecks/build/OpenAPI/audit/diff checks pass.
+- 2026-07-13 (Browser credential hardening + production smoke): browser no longer stores/reads a raw device
+  token in JS/IndexedDB. Session+CSRF protected `/browser-devices` creates an httpOnly, SameSite=Strict,
+  Secure-outside-loopback device cookie without returning its secret; cookie-auth mutations enforce exact
+  same-origin/Fetch Metadata while bearer clients remain supported. Existing IndexedDB tokens use one-time
+  authenticated rotation (old hash invalid immediately), then durable deletion; interrupted upgrade retains the
+  only still-valid credential for retry. OpenAPI security alternatives corrected (device bearer/browser cookie,
+  not admin session). Device rotation and cookie same/cross-origin tests pass. Fresh production Chromium smoke
+  paired a browser, confirmed IndexedDB has identity/cursor but no token and `document.cookie` is empty, cookie
+  handshake returned 200, UI save emitted sequence 1/revision 2 with `actor.type=device`; build/typecheck,
+  server 75/75, web 9/9 and OpenAPI lint pass.
+- 2026-07-13 (Git transition M38.1–M38.3/M38.5 hoàn tất; M38.4 đang verify): Settings/Ribbon/status/
+  README đổi rõ “Git Backup & Version History”, Central Sync và Git lag/action tách riêng. Settings v2 migration
+  giữ install v1 ở `sync.enabled=false + legacy-bidirectional`; install mới Central authority + backup-only. Pairing
+  bị hard-block trước migration; settings không thể bật legacy khi Central active. Assistant preview/confirm yêu cầu
+  conflict-free repo + remote backup (hoặc explicit local-only), commit/push full pre-migration snapshot rồi mới
+  atomically switch Central+backup-only; không pull/force. Central mode clone/pull reject409, scheduled/manual/save
+  chỉ init/commit/push với independent exponential retry và unfinished legacy merge fail-closed. Legacy pull chỉ khi
+  cả sync disabled + legacy mode và route lập tức coordinator-reconcile; tests static authority cập nhật đúng gate.
+  Remote import vẫn clone temp→preview→admin confirm→coordinator normal events; Version History restore nay đọc
+  current revision rồi conditional coordinator write, không unrevisioned overwrite. LFS backup patterns giữ nguyên.
+  Settings migration child-process tests pass cho old/new defaults; server fresh 75/75, web 9/9, full typecheck.
+  M38.4 giữ `[~]` đến integration drill repo clean/conflict/push-failure/mutual exclusion hoàn chỉnh.
+- 2026-07-13 (Central Sync headless M37.1–M37.5 hoàn tất; M37.6–M37.8 đang làm): thêm publishable
+  workspace `clients/headless`/bin `web-vault-sync` Node≥20 dùng shared OrderedSyncClient. CLI đủ init/pair/
+  sync/watch/pull/push/status JSON/conflicts list-show-resolve server-client-copy-merged/doctor/reset/completion,
+  stable exit 0/2–7 và redacted structured logs. Checksummed canonical state atomic temp+file/dir fsync mode0600,
+  token tách mode0600/env/systemd LoadCredential, config ngoài vault, monotonic sequence/cursor/apply-intent/blob-ref
+  queue. Filesystem adapter streams download hash+size→fsync→rename, 8MiB resumable upload, stable hash before/after,
+  traversal/internal/symlink/case/NFC guards, expected path/hash/revision echo, case rename, pull-only quarantine,
+  push-only metadata và bidirectional local-first conflict safety. Chokidar native + polling fallback, 750ms rename
+  correlation, single PID lock/stale recovery; SIGTERM polling-daemon smoke pushed file rồi exit0/remove lock.
+  systemd hardened Type=simple unit `systemd-analyze verify` pass. Non-root `node` image build/help/init smoke pass;
+  no-QEMU architecture-independent build stage produced OCI manifest amd64+arm64 successfully tại
+  `/tmp/web-vault-sync-multi.oci`. Headless 7/7 tests gồm 1GiB sparse streaming hash RSS<128MiB (11.4s),
+  atomic/token/symlink/hash-before-write/quarantine/lock. Real production-server drill pair→initial pull→local push,
+  overlapping two-writer conflict created durable server copy + CLI exit4/list→resolve→cursor4 synced; watcher polling
+  pushed `DaemonNew.md`. M37.6 còn real PID1 systemd install; M37.7 còn registry publish; M37.8 còn full native
+  watcher/crash/all-client pairs. `npm pack --dry-run` 36 files/31.5kB pass nhưng npm auth hiện 401.
+- 2026-07-13 (Central Sync native plugin M36.1/M36.3–M36.6 hoàn tất; M36.2/M36.7–M36.9 đang làm):
+  tạo và publish repo public riêng https://github.com/picassio/central-vault-sync từ official sample, manifest
+  `central-vault-sync`, `isDesktopOnly=false`, README/LICENSE/SECURITY/privacy/network/mobile caveats và
+  root release artifacts policy. Plugin dùng shared `OrderedSyncClient` mới promote vào sync-core: offline push
+  trước pull để stale edits đi conflict matrix, immutable manifest/cursor-expiry bootstrap, apply-intent trước
+  Vault materialize, cursor/ack sau durable save, one-use WS wake + poll/backoff. Native `requestUrl`, Vault
+  text/binary/folder/rename/trash APIs, SecretStorage-only token, pending path markers + blob-ref operation queue
+  không lưu note body, 750ms per-path debounce, resumable 8MiB upload parts, expected path/hash/revision echo,
+  focus/visibility/active-leaf resume và mobile ≥100MiB confirmation. Declarative Obsidian 1.13 settings có
+  pair/test/unpair/pause/excludes/status/diagnostics; status bar + 6 commands; native conflict modal base/server/
+  local/merged + all four resolves. Mock Vault verifies hash-before-write/rename/delete/tombstone/echo; store tests
+  verify SecretStorage/no-content/restart/sequence/idempotency; published golden fixture conformance: plugin 8/8,
+  lint/typecheck/build/policy/secret/mobile bundle scan pass. Public commit `572ee62`, CI run
+  https://github.com/picassio/central-vault-sync/actions/runs/29220795188 queued lúc ghi log. M36.2 còn npm publish;
+  M36.7/M36.8 còn real Android/iOS + desktop OS interruption matrix; M36.9 còn alpha/beta release evidence.
+- 2026-07-13 (Central Sync Phase 35 M35.1–M35.8 hoàn tất, M35.9 đang làm): browser store nay
+  per-document/path kể cả split tab, giữ base/content/entryId/revision/hash + dirty/save generation/pending/error;
+  per-path serialized save và late-response/navigation/409 tests không bao giờ clear/đè draft mới. IndexedDB strict
+  transactions giữ hashed device token state, monotonic client sequence, cursor, immutable local projection,
+  apply-intent, operations, streamed attachment Blob, drafts và per-device workspace; one-time shared-workspace
+  migration rồi bỏ hoàn toàn remote tab switching. `BrowserSyncEngine` initial immutable manifest, retained-cursor
+  bootstrap, ordered REST catch-up/apply-intent-before-materialize/cursor-after-durable-apply/ack, one-use WS wake,
+  poll/backoff/restart replay; local echo hash convergence, independent dirty diff3 merge, overlap/delete conflict.
+  Text save và streamed large text/blob attachments dùng device operations/CAS queue; 1GB path không arrayBuffer.
+  Settings có pair-this-browser, health + non-repairing sync doctor, redacted export, scope/exclusion explanation,
+  device last-seen/cursor/revoke và conflict center base/server/client/merged + binary hashes/download + all 4 choices.
+  Status bar tách Central Sync state/lag/conflict count khỏi Git Backup. Fresh web 9/9 tests, typecheck/build pass;
+  manual Chromium production inspection paired browser, status `Synced`, edited Welcome.md và durable journal event
+  actor=device sequence 1/revision 2; screenshots `/home/ubuntu/.agent-browser/tmp/screenshots/screenshot-1783909466851.png`.
+  M35.9 giữ `[~]` đến khi automated two-real-browser offline/rename/delete/crash + 1GB stream matrix hoàn tất.
+- 2026-07-13 (Central Sync Phase 34 hoàn tất): `DeviceStore` one-use random pairing TTL/hash, scrypt token
+  hash-at-rest, dedicated bearer scope, revoke/lastSeen/monotonic ack/audit. Full `/api/sync/v1`: pair/handshake/
+  one-use WS ticket, immutable paged manifest, retained ordered changes/410, ack, exact revision + ETag/Range,
+  blob HEAD/Range, resumable owned chunk uploads/quota/hash/24h/dedupe, ordered dependency-aware operations,
+  conflict list/show/all four resolutions with normal revision events + resolution idempotency, device/health admin.
+  WS ticket upgrade only, sequence wakeups, 30s ping/pong, 1MiB backpressure terminate; REST remains authority.
+  HTTPS non-loopback, device/pair/upload rate limit, CSRF origin/SameSite admin, body/path/internal/symlink guards,
+  canonical errors and no raw secrets. Generated 27 schemas + OpenAPI lint pass. Full fresh suite: sync-core 12/12,
+  server 73/73; includes 50k manifest, 1k-event journal + 500 reconnect clients under 128MiB delta, auth/revoke/
+  expiry, batch continuation, range/upload, security and all prior fault/property/E2E tests. Audit 0 vulnerabilities.
+- 2026-07-13 (Central Sync Phase 33 hoàn tất — M33.1/M33.6): coordinator có đủ canonical create/
+  modify/rename/delete/mkdir/rmdir/copy/trash/restore/import. Explicit directory/Git import có dry-run plan,
+  confirm, optional delete-missing, temp shallow clone/LFS fetch ngoài vault, sau đó mọi diff thành normal ordered
+  coordinator events; kind conflict dừng trước mutation. Git clone vào empty vault synchronously drift-import;
+  auto backup tuyệt đối không pull. Authority CI test scan toàn routes cấm legacy `vault.write*/rename/copy/remove/
+  trash/restore` và assert Git sync không gọi pull + import/clone mediated. Local import integration verifies modify/
+  create/mkdir/delete. Tất cả M33.1–M33.9 giờ `[x]` với tests; Phase 34 device auth/API tiếp theo.
+- 2026-07-13 (Central Sync M33.7/M33.9 hoàn tất): checksummed durable `DerivedEventQueue` enqueue sau
+  commit, chỉ advance appliedSequence khi aggregate QMD/link/file/share/stat/Git/WS subscriber thành công; failure
+  giữ event + error/attempt và exponential retry, `/healthz` exposes latest/indexLag/queue nên không báo Synced giả.
+  Unit test failure→retry + health lag. Two-writer E2E tạo stale conflict copy, direct filesystem modify và concurrent
+  independent creates; journal sequence 1..6 gapless, canonical không overwrite. 6 crash-boundary matrix trước đó
+  xác nhận không accepted-write loss/phantom. Git auto-sync đổi backup-only commit→push; pull bị 409, clone explicit
+  được drift-import qua coordinator; generated `.gitattributes` synchronously reconcile thành event.
+- 2026-07-13 (Central Sync M33.8 hoàn tất): Chokidar stable-write mọi add/change/unlink/dir đi qua
+  coordinator `server-fs`; committed writes đăng ký `(path,exists,hash)` suppression 10s nên echo không duplicate.
+  External modify giữ previous blob/base, delete tạo recoverable trash, empty-dir revisioned. Rename correlation dùng
+  cached inode khi platform có + unique hash heuristic trong 750ms; ambiguous fallback ordered delete/create.
+  60s bounded single-flight drift scan hash toàn vault, correlate stable-identity rename, reconcile missing/new/
+  changed; startup scan bắt offline modifications trước nhận writes. 4 integration tests pass: full external chain,
+  suppression, hash rename + restart/offline drift, directory lifecycle.
+- 2026-07-13 (Central Sync M33.4/M33.5 hoàn tất): recursive coordinator copy mở rộng thành ordered mkdir/
+  create events với identity mới. Durable `TrashStore`; delete/rmdir move vào internal trash + tombstone, restore
+  reuse tombstoned entryId/revision khi original path trống hoặc unique restored path + identity mới khi collision;
+  purge/empty trash không sync internal bytes. Toàn bộ web write/create/upload/rename/copy/delete/trash/restore
+  routes qua coordinator và committed subscribers (không route-local reindex). Agent PUT/append/delete cũng qua
+  coordinator, read trả revision/ETag, hỗ trợ clientSequence/idempotency/baseRevision; thời điểm này omission còn
+  warning/optional strict env, nhưng compatibility path đã được xoá ở stable-write hardening 2026-07-13: nay luôn
+  428/409 và không có env bypass. Coordinator tests 14/14 riêng, full server
+  49/49 trước các test mới; typecheck pass.
+- 2026-07-13 (Central Sync M33.2 hoàn tất): durable checksummed `ConflictStore` + conflict metadata trong
+  WAL intent bảo đảm crash replay. Matrix verified: same create/hash convergence không event; clean text diff3;
+  overlap/base-expired/non-UTF8/binary tạo unique server conflict copy giữ canonical; modify sau rename và rename
+  sau only-modify rebase theo entryId; divergent rename/delete-vs-modify tạo unresolved conflict record; modify
+  tombstone thành copy; delete tombstone converge; case-only rename qua deterministic recoverable temp; non-empty
+  rmdir reject. Full results idempotent, conflict center giữ submitted/current/base refs. Server 49/49 tests pass.
+- 2026-07-13 (Central Sync M33.2 clean-merge foundation): coordinator nay lưu mọi committed new bytes vào
+  CAS và giữ exact previous revision trong `MergeBaseStore` trước khi xóa WAL. Stale text modify (allowlist,
+  UTF-8, ≤10 MiB) tải exact base/current/submitted, deterministic diff3; independent hunks commit revision mới
+  với status `merged` và exact idempotency retry, overlap/base-missing/binary không đụng canonical bytes. Tests mới
+  xác nhận clean merge `rev1→server rev2→merged rev3`, retained rev1 và overlap giữ server + không tạo event.
+  M33.2 vẫn `[~]` vì overlap/binary/delete conflicts phải tạo durable conflict-copy/center thay vì chỉ 409.
+- 2026-07-13 (Central Sync M33.4/M33.7 + browser safety phần 1): server boot khởi tạo singleton
+  `SyncCoordinator` trước khi nhận request; `/healthz` trả 503 khi sync degraded. Web routes content read trả
+  entryId/revision/hash + ETag; text write, create folder, upload và rename đi qua coordinator, blob CAS và
+  conditional baseRevision/If-Match (legacy omission có HTTP Warning rõ ràng). Committed-event subscriber thống
+  nhất QMD/link/file/share/stat/Git scheduler và phát `syncChanged` sequence wake-up. Browser API giữ revision;
+  active editor capture editGeneration+baseRevision khi save và chỉ clear dirty nếu generation/path không đổi,
+  đóng autosave dirty-generation race cơ bản. Copy/delete/trash/restore, watcher suppression và per-tab durable
+  sync state/conflict UI còn lại nên các milestone giữ `[~]`. Fresh root typecheck + 12 sync-core + 42 server
+  tests pass.
+- 2026-07-12 (Central Sync Phase 32 hoàn tất; M33.3 hoàn tất): content-addressed immutable `BlobStore`
+  streaming + SHA/size/limit verify, atomic dedupe, mode 0600, exact Range và GC; `MergeBaseStore` age/count/
+  protected-ref retention. Durable bounded per-device idempotency reject key/sequence reuse và exact retry; WAL
+  recovery rebuilds idempotency. Ack/age-gated compaction backs up metadata + sealed segments trước khi xóa,
+  prunes safe tombstone/base/blob refs và exposes cursor-expired. `sync:doctor` validates checksum/continuity,
+  sequence projections, filesystem hashes, bases/blobs/intents/uploads; chỉ auto-repair expired upload/old orphan,
+  corruption recommends read-only. Fault injector covers 6 crash boundaries từ intent đến idempotency snapshot;
+  deterministic restart finish/rollback và exact retry verified. Property test replays 137 events qua 5 segment
+  limits. Server tổng 42/42 tests pass. M33.1/M33.2 còn `[~]` đúng phần canonical adapters/conflict matrix.
+- 2026-07-12 (Central Sync M32.4 hoàn tất; M33.1–M33.3 foundation): WAL transaction directories stage
+  previous/new bytes bằng streaming, fsync content + full event/idempotency result intent, materialized marker và
+  durable cleanup. Startup validates/replays journal, deterministically finishes matching materialized pre-commit
+  intent, rolls back unmaterialized intent, rebuilds revision/vault snapshots; corruption vào read-only degraded.
+  `SyncCoordinator` hiện có subtree/case-fold locks + journal mutex, conditional create/modify/rename/delete/
+  mkdir/rmdir, hash/size validation, atomic content install, server trash, commit-point publish và no-overwrite
+  direct-drift guard. 10 tests mới: WAL lifecycle/cleanup, full mutation chain, stale/collision/hash/direct drift,
+  directory rule, 2 crash recovery boundaries, corruption degraded (server tổng 21/21 trước lock tests).
+  M33.1 còn copy/trash/restore/import adapters; M33.2 còn merge/conflict matrix; M33.3 còn durable idempotency.
+  Bắt đầu M32.5 content-addressed blob/base retention.
+- 2026-07-12 (Central Sync M32.4 journal phần 1): `JournalStore` append qua async serial queue, bắt buộc
+  contiguous global sequence, active segment checksummed atomic rewrite, bounded rotation + seal immutable segment,
+  replay sau cursor/latest/seal, detect checksum/gap/missing segment. 4 journal tests pass gồm concurrent append,
+  rotation, rejected gap không poison queue và tamper. M32.4 giữ `[~]`: write-ahead intent + startup finish/rollback
+  sẽ hoàn tất cùng coordinator transaction ở M33.3.
+- 2026-07-12 (Central Sync M32.3 hoàn tất, M32.4 bắt đầu): `RevisionStore` checksummed snapshot có
+  stable random entryId, path/kind/revision/hash/size/mtime/sequence/tombstone; startup vault scan stream-hash
+  từng file với before/after stat retry, skip symlink + server exclusions, giữ empty directory, reject Unicode/case
+  collisions, persist identity idempotent. Apply committed event dùng shared deterministic replay, lookup id/path,
+  rename/delete giữ identity. 4 tests mới (server tổng 7/7) pass. Tiếp theo segmented journal + WAL intents.
+- 2026-07-12 (Central Sync M32.2 hoàn tất, M32.3 bắt đầu): server có `sync/storage.ts` tạo đầy đủ
+  `data/sync/` mode 0700 và generic `AtomicJsonStore` envelope checksum, temp-file mode 0600 + file fsync +
+  rename + parent-dir fsync, previous `.bak`, corruption typed error. `VaultStateStore` tạo stable random vaultId,
+  schemaVersion/currentSequence, load/create idempotent và cấm sequence lùi. 3 server tests pass: layout/mode +
+  identity bền, checksum tamper/backup, sequence persistence. M32.3 revision index tiếp theo.
+- 2026-07-12 (Central Sync M32.1 hoàn tất): sync-core nay có branded IDs/sequence/revision, server path
+  exclusions + NFC/case collision, cross-platform incremental SHA-256, timing-safe hex compare, deterministic
+  line diff3 + conflict-copy naming, pure event replay và durable client queue/apply-intent state machine.
+  Thêm 5 core tests (tổng 12/12 pass). Nâng Vite 5→8 + plugin-react 4→6 và chạy `npm audit fix` để xoá toàn bộ
+  2 critical/2 high/3 moderate dependency advisories; `npm audit` = 0. M31.7 vẫn đang làm tới khi adapters tồn tại.
+- 2026-07-12 (Central Sync M31.4 hoàn tất, M31.7/M32.1 đang làm): thêm workspace
+  `packages/sync-core` với Zod runtime schemas + TypeScript types cho protocol 1.0, stable entry/event/operation,
+  auth/pairing, manifest/change/ack, resumable blob, conflict/device/error envelopes; pure deterministic event
+  replay (sequence gap, tombstone, subtree rename, folded path collision). Generator tạo 27 JSON Schema definitions
+  ở `docs/sync/protocol-v1.schema.json`; OpenAPI 3.1 đầy đủ endpoint/auth ở `docs/sync/openapi-v1.yaml` + Redocly
+  config; golden transcript/conformance tests 7/7 pass (schema, unsafe/NFD paths, UTF-8 byte cap, contiguous events,
+  identity rename/tombstone/subtree replay). Root workspace build/typecheck/test đã wire sync-core. M31.7 chưa xong
+  vì server/web/plugin/headless conformance adapters chưa tồn tại; M32.1 tiếp tục hashing/conflict/offline engine.
+- 2026-07-12 (Roadmap Central Sync FR-13): audit xác nhận sync hiện tại chưa phải true sync (Git polling,
+  WS chỉ refresh tree, no revision/ETag, stale browser có thể overwrite và autosave có generation race).
+  Bump `PRD.md` 1.5, thêm FR-13/NFR/API/data model/DoD và đổi vai trò Git thành backup/version history.
+  Tạo `docs/SYNC_ROADMAP.md`: authoritative SyncCoordinator, revision/hash + ordered journal/tombstone/
+  idempotency/conflict-copy, browser migration, native Obsidian community plugin, Linux headless CLI/daemon,
+  systemd/Docker, Git transition, security/test/operations/release gates. Thêm Phase 31–40; implementation
+  chưa bắt đầu, mọi checkbox runtime giữ `[ ]` tới khi code được verify. Sau audit hoàn thiện, roadmap đổi
+  sang implementation-ready baseline: chốt M31.3/M31.5/M31.6 (decision, conflict matrix, threat model), thêm
+  stable entryId rename semantics, auth matrix + WS ticket, manifest snapshot/ack, resumable chunks, WAL intent
+  commit/recovery, bounded legacy migration, exact v1 scope,
+  phase 31–40 dependency/estimate duy nhất và traceability FR-13/DoD→milestone evidence.
 - 2026-06-22 (Fix Graph view dưới CSP không cho `unsafe-eval`): trên host production (vd `360of.me`) Graph
   view trắng + lỗi `Current environment does not allow unsafe-eval, please use pixi.js/unsafe-eval module`.
   PixiJS v8 sinh code shader/UBO bằng `new Function()`, bị CSP chặn. Sửa: trong `GraphView.tsx` import

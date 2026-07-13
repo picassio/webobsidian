@@ -14,6 +14,7 @@ import { editorFind, getActiveEditor } from '../lib/activeEditor';
 import { triggerAddProperty } from '../lib/livePreview';
 import { pathToUrl } from '../lib/urlsync';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
+import { uploadBrowserFile } from '../lib/browser-sync-runtime';
 
 function EditorPane() {
   const activePath = useStore((s) => s.activePath);
@@ -264,7 +265,7 @@ export default function Workspace() {
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) continue;
       try {
-        const { path } = await api.upload(file);
+        const { path } = await uploadBrowserFile(file);
         setContent(`${content}\n![[${path}]]\n`);
         notify(`Inserted ${path}`);
       } catch (e: any) {

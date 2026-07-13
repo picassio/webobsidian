@@ -25,8 +25,26 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit, fault, scale, and recovery tests
+        run: npm test
+
+      - name: Validate Sync OpenAPI
+        run: npm run lint:sync-api
+
+      - name: Dependency audit
+        run: npm audit --audit-level=low
+
       - name: Build
         run: npm run build
+
+      - name: Install Chromium for browser-pair E2E
+        run: npx playwright install --with-deps chromium
+
+      - name: Two-browser Central Sync E2E
+        run: npm run test:e2e:browser
+
+      - name: Verify headless systemd unit
+        run: systemd-analyze verify clients/headless/packaging/systemd/web-vault-sync.service
 
   docker:
     name: Docker image builds
@@ -36,3 +54,20 @@ jobs:
 
       - name: Build image
         run: docker build -t webobsidian:ci .
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build headless client for amd64 and arm64
+        run: docker buildx build --platform linux/amd64,linux/arm64 -f clients/headless/Dockerfile --output type=oci,dest=/tmp/web-vault-sync.oci .
+
+      - name: Smoke-test non-root headless image
+        run: |
+          docker build -f clients/headless/Dockerfile -t web-vault-sync:ci .
+          test "$(docker image inspect web-vault-sync:ci --format '{{.Config.User}}')" = "node"
+          docker run --rm web-vault-sync:ci help
+          docker run --rm -v headless-ci-config:/config -v headless-ci-vault:/vault web-vault-sync:ci \
+            init --server http://127.0.0.1:3000 --vault /vault --mode pull-only --json

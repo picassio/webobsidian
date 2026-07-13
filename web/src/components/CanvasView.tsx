@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } fr
 import { useStore, type ContextMenuItem } from '../lib/store';
 import { api, type TreeNode } from '../lib/api';
 import { useIsMobile } from '../lib/useIsMobile';
+import { uploadBrowserFile } from '../lib/browser-sync-runtime';
 import Icon from './Icon';
 import Preview from './Preview';
 import {
@@ -826,7 +827,7 @@ export default function CanvasView() {
     e.target.value = '';
     if (!f) return;
     try {
-      const { path } = await api.upload(f);
+      const { path } = await uploadBrowserFile(f);
       const c = viewCenter();
       addFileNode(path, c.x, c.y);
       notify(`Inserted ${path}`);

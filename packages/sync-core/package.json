@@ -1,0 +1,57 @@
+{
+  "name": "@webobsidian/sync-core",
+  "version": "0.1.1",
+  "description": "Platform-neutral contracts and crash-safe ordered client state machine for WebObsidian Sync Protocol 1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/picassio/webobsidian.git",
+    "directory": "packages/sync-core"
+  },
+  "homepage": "https://github.com/picassio/webobsidian/tree/main/packages/sync-core#readme",
+  "bugs": {
+    "url": "https://github.com/picassio/webobsidian/issues"
+  },
+  "keywords": [
+    "sync",
+    "obsidian",
+    "offline",
+    "conflict",
+    "protocol"
+  ],
+  "private": false,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./fixtures/protocol-v1.json": "./fixtures/protocol-v1.json"
+  },
+  "files": [
+    "dist",
+    "fixtures"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "generate:schema": "tsx scripts/generate-schema.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "node-diff3": "^3.2.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

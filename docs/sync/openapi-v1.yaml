@@ -1,0 +1,311 @@
+openapi: 3.1.0
+info:
+  title: WebObsidian Sync API
+  version: 1.0.0
+  description: Revision-safe file synchronization contract. The roadmap is normative for transaction and conflict semantics.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api/sync/v1
+security:
+  - deviceToken: []
+  - browserDeviceCookie: []
+paths:
+  /pairing-codes:
+    post:
+      operationId: createPairingCode
+      summary: Create a single-use pairing code (web administrator only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/PairingCodeRequest' }
+      responses:
+        '201': { description: Pairing code, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/PairingCodeResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /browser-devices:
+    post:
+      operationId: createBrowserDevice
+      summary: Create an httpOnly-cookie browser identity without exposing its device credential
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deviceId, deviceName]
+              properties:
+                deviceId: { type: string, minLength: 8, maxLength: 128 }
+                deviceName: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '201':
+          description: Browser identity; sets the httpOnly wo_sync_device cookie and never returns a token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [protocolVersion, vaultId, deviceId]
+                properties:
+                  protocolVersion: { const: '1.0' }
+                  vaultId: { type: string }
+                  deviceId: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+  /browser-device/upgrade:
+    post:
+      operationId: upgradeLegacyBrowserCredential
+      summary: One-time rotation of a legacy IndexedDB token into an httpOnly browser cookie
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 16, maxLength: 512, writeOnly: true }
+      responses:
+        '200': { description: Credential rotated and browser cookie set }
+        default: { $ref: '#/components/responses/Error' }
+  /browser-device/logout:
+    post:
+      operationId: clearBrowserDeviceCookie
+      summary: Clear this browser's httpOnly sync credential
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Browser device cookie cleared }
+        default: { $ref: '#/components/responses/Error' }
+  /pair:
+    post:
+      operationId: pairDevice
+      summary: Exchange a pairing code for a device-bound token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/PairRequest' }
+      responses:
+        '201': { description: Device credential, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/PairResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /handshake:
+    post:
+      operationId: handshake
+      summary: Negotiate protocol, capabilities, limits, and sequence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/HandshakeRequest' }
+      responses:
+        '200': { description: Negotiated session, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/HandshakeResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /ws-tickets:
+    post:
+      operationId: createWebSocketTicket
+      summary: Create a one-use WebSocket ticket valid for 60 seconds
+      responses:
+        '200': { description: Ticket, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/WsTicketResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /manifest:
+    get:
+      operationId: getManifestPage
+      summary: Read a snapshot-consistent manifest page
+      parameters:
+        - { name: snapshotId, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Manifest page, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/ManifestPage' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /changes:
+    get:
+      operationId: getChanges
+      summary: Read contiguous committed events after a durable cursor
+      parameters:
+        - { name: after, in: query, required: true, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000 } }
+      responses:
+        '200': { description: Ordered changes, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/ChangesResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /ack:
+    post:
+      operationId: acknowledgeSequence
+      summary: Record the highest sequence durably applied by this device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/AckRequest' }
+      responses:
+        '200': { description: Acknowledgement, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/AckResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /files:
+    get:
+      operationId: getFileRevision
+      summary: Stream an exact retained entry revision
+      parameters:
+        - { name: entryId, in: query, required: true, schema: { type: string } }
+        - { name: revision, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Exact revision bytes
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/octet-stream: { schema: { type: string, contentEncoding: binary } }
+        default: { $ref: '#/components/responses/Error' }
+  /blobs/{sha256}:
+    parameters:
+      - { name: sha256, in: path, required: true, schema: { type: string, pattern: '^[a-f0-9]{64}$' } }
+    head:
+      operationId: probeBlob
+      summary: Probe for a completed content-addressed blob
+      responses:
+        '200': { description: Blob exists }
+        '404': { description: Blob does not exist }
+    get:
+      operationId: getBlob
+      summary: Stream a completed blob with HTTP Range support
+      responses:
+        '200': { description: Blob bytes, content: { application/octet-stream: { schema: { type: string, contentEncoding: binary } } } }
+        '206': { description: Blob byte range, content: { application/octet-stream: { schema: { type: string, contentEncoding: binary } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /blob-uploads:
+    post:
+      operationId: createBlobUpload
+      summary: Start or resume a content-addressed upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/BlobUploadCreateRequest' }
+      responses:
+        '200': { description: Upload session, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/BlobUploadCreateResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /blob-uploads/{uploadId}/{part}:
+    put:
+      operationId: uploadBlobPart
+      summary: Upload one bounded part
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: string } }
+        - { name: part, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, contentEncoding: binary } }
+      responses:
+        '204': { description: Part accepted idempotently }
+        default: { $ref: '#/components/responses/Error' }
+  /blob-uploads/{uploadId}/complete:
+    post:
+      operationId: completeBlobUpload
+      summary: Verify and publish a completed upload
+      parameters:
+        - { name: uploadId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Completed blob, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/BlobUploadCompleteResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /operations:
+    post:
+      operationId: applyOperations
+      summary: Apply an ordered, non-atomic idempotent operation batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/OperationsRequest' }
+      responses:
+        '200': { description: Per-operation outcomes, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/OperationsResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /conflicts:
+    get:
+      operationId: listConflicts
+      summary: List own conflicts for device token, all conflicts for admin session
+      responses:
+        '200': { description: Conflicts, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/ConflictsResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /conflicts/{conflictId}/resolve:
+    post:
+      operationId: resolveConflict
+      summary: Resolve a conflict through the mutation coordinator
+      parameters:
+        - { name: conflictId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './protocol-v1.schema.json#/definitions/ConflictResolutionRequest' }
+      responses:
+        '200': { description: Resolution accepted }
+        default: { $ref: '#/components/responses/Error' }
+  /devices:
+    get:
+      operationId: listDevices
+      summary: List paired devices (web administrator only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Devices, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/DevicesResponse' } } } }
+        default: { $ref: '#/components/responses/Error' }
+  /devices/{deviceId}:
+    delete:
+      operationId: revokeDevice
+      summary: Revoke a paired device (web administrator only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: deviceId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Device revoked }
+        default: { $ref: '#/components/responses/Error' }
+  /health:
+    get:
+      operationId: getSyncHealth
+      summary: Read journal/revision health (web administrator only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Healthy or degraded sync subsystem }
+        default: { $ref: '#/components/responses/Error' }
+  /metrics:
+    get:
+      operationId: syncPrometheusMetrics
+      summary: Export administrator-authenticated Prometheus sync metrics
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Prometheus 0.0.4 text exposition (sequence/index/device lag, operations, latency, transfer/dedup, recovery mode)
+          content:
+            text/plain:
+              schema: { type: string }
+        default: { $ref: '#/components/responses/Error' }
+  /doctor:
+    get:
+      operationId: runSyncDoctor
+      summary: Run non-repairing journal, revision, blob, and filesystem diagnostics (web administrator only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Sync doctor report without secrets or content }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+    browserDeviceCookie:
+      type: apiKey
+      in: cookie
+      name: wo_sync_device
+      description: HttpOnly, Secure outside loopback, SameSite=Strict; browser scripts never receive the token.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: wo_session
+  responses:
+    Error:
+      description: Canonical protocol error
+      content:
+        application/json:
+          schema: { $ref: './protocol-v1.schema.json#/definitions/ErrorEnvelope' }

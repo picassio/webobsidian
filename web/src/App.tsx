@@ -17,6 +17,7 @@ import FolderPicker from './components/FolderPicker';
 import { loadPlugins } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
+import { initializeBrowserSync } from './lib/browser-sync-runtime';
 
 export default function App() {
   const authed = useStore((s) => s.authed);
@@ -69,7 +70,13 @@ export default function App() {
       .catch(() => {});
     useStore.getState().loadShares(); // badge shared notes in the file tree
     loadPlugins().catch(() => {});
-    // websocket live updates
+    let stopBrowserSync = () => {};
+    let disposed = false;
+    void initializeBrowserSync().then((stop) => {
+      if (disposed) stop();
+      else stopBrowserSync = stop;
+    }).catch(() => useStore.getState().setSyncStatus('error'));
+    // Legacy web-session socket still refreshes non-sync projections; ordered content catch-up uses BrowserSyncEngine.
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     let treeTimer: number | undefined;
@@ -80,15 +87,15 @@ export default function App() {
           // coalesce bursts of fs events into a single tree refresh
           window.clearTimeout(treeTimer);
           treeTimer = window.setTimeout(() => loadTree(), 800);
-        } else if (msg.type === 'uistate') {
-          // another tab/device changed the workspace → sync live
-          useStore.getState().applyRemoteState(msg.state, msg.originId);
         }
+        // Workspace/tabs are deliberately per-device; remote UI-state messages are ignored.
       } catch {
         /* ignore */
       }
     };
     return () => {
+      disposed = true;
+      stopBrowserSync();
       window.clearTimeout(treeTimer);
       ws.close();
     };

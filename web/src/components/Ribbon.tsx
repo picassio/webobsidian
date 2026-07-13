@@ -13,7 +13,7 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   const notify = useStore((s) => s.notify);
   const loadTree = useStore((s) => s.loadTree);
 
-  // Show the Sync-now button only when git sync is enabled in settings.
+  // Show the backup button only when Git backup is enabled in settings.
   const [gitEnabled, setGitEnabled] = useState(false);
   const [syncing, setSyncing] = useState(false);
   useEffect(() => {
@@ -26,13 +26,13 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   const sync = async () => {
     if (syncing) return;
     setSyncing(true);
-    notify('Syncing…');
+    notify('Creating Git backup…');
     try {
       const r = await api.gitSync();
-      notify(r.ok ? 'Synced ✓' : `Sync: ${r.log.at(-1)}`);
+      notify(r.ok ? 'Git backup complete ✓' : `Git backup: ${r.log.at(-1)}`);
       await loadTree();
     } catch (e: any) {
-      notify(`Sync failed: ${e.message}`);
+      notify(`Git backup failed: ${e.message}`);
     } finally {
       setSyncing(false);
     }
@@ -63,7 +63,7 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
       </button>
       <div className="spacer" />
       {gitEnabled && (
-        <button title={syncing ? 'Syncing…' : 'Sync now'} onClick={sync} disabled={syncing}>
+        <button title={syncing ? 'Backing up…' : 'Back up to Git now'} onClick={sync} disabled={syncing}>
           <Icon name="refresh-cw" size={18} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} />
         </button>
       )}
