@@ -604,6 +604,8 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
   requires tag/root/core/headless version equality, publishes both npm packages with provenance, and creates the
   GitHub release only afterward. `docs/sync/README.md` records the operator prerequisite and source-build-only
   container policy. No stable tag was created and the currently absent repository secret remains an explicit gate.
+  Commit `971d2d3` passed CI run 29237600099: 124 tests, both production E2Es, type/build/API/audit, systemd,
+  attested amd64/arm64 source builds, and non-root smoke.
 - 2026-07-13 (Two-headless-client merge/conflict drill): paired two independent Linux CLI profiles to a fresh
   production server and verified create/catch-up, clean stale diff3 convergence, overlapping stale-write conflict
   preservation, exit code 4/listing, contiguous sequences 1–5, and distinct device actors. The first drill exposed
