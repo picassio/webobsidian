@@ -122,7 +122,12 @@ async function verifyExternalPairingCodeUi(page) {
   await page.locator('button[title="Settings"]').first().click();
   await page.getByRole('button', { name: 'Central Sync' }).click();
   await page.getByLabel('Pairing device name').fill('Browser E2E external client');
-  await page.getByRole('button', { name: 'Create pairing code' }).click();
+  page.once('dialog', async (dialog) => {
+    assert.match(dialog.message(), /device name does not create a vault/i);
+    assert.match(dialog.message(), /server vault/i);
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: /Create code for/ }).click();
   const code = await page.getByLabel('One-use pairing code').inputValue();
   assert.match(code, /^pair_[A-Za-z0-9_-]{32}$/u);
   await page.locator('.modal-bg').click({ position: { x: 4, y: 4 } });
