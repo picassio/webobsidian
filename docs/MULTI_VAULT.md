@@ -39,12 +39,13 @@ Vault registry endpoints:
 
 ```text
 GET    /api/vaults
-POST   /api/vaults                  { name, path }
+POST   /api/vaults                  { name, create: true } or { name, path }
 PATCH  /api/vaults/:vaultId         { name } or { default: true }
 DELETE /api/vaults/:vaultId         { confirm: vaultId }
 ```
 
-Registration requires an existing non-symlink directory inside the server allowlist. Registered roots cannot be equal,
+Managed creation requires only a name: the server allocates a restricted unique empty directory under a safe allowlisted
+parent and registers it atomically. Existing-directory registration requires a non-symlink directory inside the server allowlist. Registered roots cannot be equal,
 nested or ancestors of one another. Unregistering never deletes vault files or runtime metadata. The detached record is
 retained so registering the same real path again restores its original `vaultId`, devices and journal.
 

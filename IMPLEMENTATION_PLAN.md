@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.9 complete/deployed: Central Sync vault dropdown plus active-device Disconnect controls; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-14 (M41.10 in progress: owner-created empty vault from Web UI with safe managed-root provisioning; M36.10 Community review pending)
 
 ---
 
@@ -644,6 +644,9 @@ Cập nhật lần cuối: 2026-07-14 (M41.9 complete/deployed: Central Sync vau
 - [x] M41.9 Central Sync vault/device control (PRD 1.11): colocated vault dropdown scopes health/pairing/conflicts/
       devices; active connected devices show name/id/last-seen/cursor and explicit Disconnect revocation; revoked
       history is summarized separately. Plugin remains one-vault-token-bound and changes target only by Unpair/new code.
+- [~] M41.10 User-created empty vaults (PRD 1.12): Settings creates an isolated empty server vault from a name only;
+      server chooses a safe managed allowlist root, creates a restricted unique directory and registers atomically,
+      while preserving separate register-existing and no-delete/unregister semantics; unit/E2E/rendered/deployment proof.
 
 ### Nhật ký tiến độ
 - 2026-07-14 (Central Sync vault/device controls): PRD 1.11 and commit `3b2c81b` add a colocated vault dropdown

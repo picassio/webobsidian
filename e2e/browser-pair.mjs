@@ -120,6 +120,7 @@ async function waitForServer() {
 }
 async function verifyExternalPairingCodeUi(page) {
   await page.locator('button[title="Settings"]').first().click();
+  await page.getByRole('button', { name: 'Create vault', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Central Sync' }).click();
   const syncVault = page.getByLabel('Central Sync vault');
   assert.match(await syncVault.inputValue(), /^vault_/u);

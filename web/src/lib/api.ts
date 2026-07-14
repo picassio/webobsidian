@@ -178,6 +178,9 @@ export const api = {
 
   // vault registry
   listVaults: () => req<{ defaultVaultId: string; vaults: VaultSummary[] }>('/api/vaults/'),
+  createVault: (name: string) => req<{ created: true; vault: VaultSummary }>('/api/vaults/', {
+    method: 'POST', body: JSON.stringify({ name, create: true }),
+  }),
   registerVault: (name: string, path: string) => req<{ vault: VaultSummary }>('/api/vaults/', {
     method: 'POST', body: JSON.stringify({ name, path }),
   }),

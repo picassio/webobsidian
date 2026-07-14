@@ -24,6 +24,15 @@ test('vault registry rejects unsafe roots and unregisters without deleting files
   const original = initial.vaults.items[0];
   assert.equal(original.storage, 'legacy');
 
+  const managed = await registry.createManagedVault('Managed Personal Notes');
+  assert.equal(managed.storage, 'isolated');
+  assert.equal(managed.sync.enabled, true);
+  assert.equal(managed.sync.bootstrapState, 'ready');
+  assert.equal(path.dirname(managed.path), base);
+  assert.match(path.basename(managed.path), /^managed-personal-notes-[a-f0-9]{10}$/);
+  assert.equal((await fs.stat(managed.path)).mode & 0o777, 0o750);
+  assert.deepEqual(await fs.readdir(managed.path), []);
+
   const second = await registry.registerVault({ name: 'Second', path: secondRoot });
   assert.equal(second.storage, 'isolated');
   assert.equal(second.sync.bootstrapState, 'backup-required');

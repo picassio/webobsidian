@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -69,6 +69,17 @@ try {
   assert.equal(registered.response.status, 201, JSON.stringify(registered.body));
   const idB = registered.body.vault.id;
   assert.notEqual(idA, idB);
+  const managed = await request('/api/vaults', {
+    method: 'POST',
+    headers: { origin: base, 'sec-fetch-site': 'same-origin' },
+    body: JSON.stringify({ name: 'Created Vault C', create: true }),
+  });
+  assert.equal(managed.response.status, 201, JSON.stringify(managed.body));
+  assert.equal(managed.body.created, true);
+  const idC = managed.body.vault.id;
+  assert.equal(path.dirname(managed.body.vault.path), root);
+  assert.equal((await stat(managed.body.vault.path)).isDirectory(), true);
+  assert.deepEqual(await readdir(managed.body.vault.path), []);
 
   for (const [vaultId, content] of [[idA, 'alpha'], [idB, 'bravo']]) {
     const write = await request('/api/files/content', { vaultId, method: 'PUT', body: JSON.stringify({ path: 'same.md', content }) });
@@ -113,13 +124,13 @@ try {
   await stop();
   start();
   const health = await waitHealthy();
-  assert.equal(health.vaults.length, 2);
+  assert.equal(health.vaults.length, 3);
   cookie = '';
   const relogin = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: '123456' }) });
   cookie = relogin.headers.get('set-cookie')?.split(';')[0] ?? '';
   assert.equal((await request('/api/files/content?path=same.md', { vaultId: idA })).body.content, 'alpha');
   assert.equal((await request('/api/files/content?path=same.md', { vaultId: idB })).body.content, 'bravo');
-  console.log(JSON.stringify({ ok: true, vaults: [idA, idB], tokenHeaderOverrideDenied: true, apiKeyIsolation: true, restart: true }));
+  console.log(JSON.stringify({ ok: true, vaults: [idA, idB, idC], managedCreate: true, tokenHeaderOverrideDenied: true, apiKeyIsolation: true, restart: true }));
 } finally {
   await stop();
   await rm(root, { recursive: true, force: true });

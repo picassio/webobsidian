@@ -127,6 +127,50 @@ export function registerVault(input: RegisterVaultInput): Promise<VaultRecord> {
   return serializeRegistry(() => registerVaultInternal(input));
 }
 
+export function createManagedVault(name: string): Promise<VaultRecord> {
+  return serializeRegistry(async () => {
+    const settings = await getPersistedSettings();
+    const allowedRoots = await effectiveAllowedRoots(undefined, [...settings.vaults.items, ...settings.vaults.detached]);
+    const registeredRoots = await Promise.all(settings.vaults.items.map((item) => fs.realpath(item.path).catch(() => path.resolve(item.path))));
+    let managedRoot: string | undefined;
+    for (const candidate of allowedRoots) {
+      const stat = await fs.lstat(candidate).catch(() => null);
+      if (!stat?.isDirectory() || stat.isSymbolicLink()) continue;
+      const real = await fs.realpath(candidate);
+      // A managed parent may contain registered child vaults, but must never sit inside a registered vault.
+      if (!registeredRoots.some((registered) => isInside(real, registered))) {
+        managedRoot = real;
+        break;
+      }
+    }
+    if (!managedRoot) {
+      throw Object.assign(new Error('No managed vault root is available; configure a separate allowed parent directory'), { status: 409, code: 'managed_vault_root_unavailable' });
+    }
+    const slug = vaultSlug(name);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const root = path.join(managedRoot, `${slug}-${randomBytes(5).toString('hex')}`);
+      try {
+        await fs.mkdir(root, { mode: 0o750 });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+        throw error;
+      }
+      try {
+        return await registerVaultInternal({ name, path: root, allowedRoots: [managedRoot] });
+      } catch (error) {
+        await fs.rmdir(root).catch(() => undefined);
+        throw error;
+      }
+    }
+    throw Object.assign(new Error('Unable to allocate a unique managed vault directory'), { status: 503, code: 'managed_vault_allocation_failed' });
+  });
+}
+
+function vaultSlug(name: string): string {
+  return name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'vault';
+}
+
 async function registerVaultInternal(input: RegisterVaultInput): Promise<VaultRecord> {
   const settings = await getPersistedSettings();
   const allowedRoots = await effectiveAllowedRoots(input.allowedRoots, [...settings.vaults.items, ...settings.vaults.detached]);

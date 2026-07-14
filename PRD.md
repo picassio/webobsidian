@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.11 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Phiên bản: 1.12 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Changelog 1.12 (user-created empty vaults): owner có thể nhập tên và tạo server vault rỗng trực tiếp trong
+> Settings → Vault & Files, không cần shell/path thủ công. Server chọn managed root nằm trong allowlist nhưng không
+> nằm bên trong registered vault, tạo slug+random directory mode hạn chế, register isolated runtime atomically và chỉ
+> cleanup đúng empty directory vừa tạo nếu registration fail. Register existing path vẫn là flow riêng; root overlap,
+> symlink/escape và unregister-never-delete invariants giữ nguyên.
 > Changelog 1.11 (sync vault/device control): Central Sync settings có vault dropdown tại chỗ, luôn scope status,
 > pairing, conflict và device list theo vault đang chọn. UI chỉ liệt kê active connected devices làm danh sách chính,
 > hiện name/id/last-seen/cursor và nút Disconnect/revoke tức thời; revoked history chỉ hiện summary để không nhầm với
@@ -505,7 +510,7 @@ POST   /auth/logout
 POST   /auth/change-password  # đổi pass: { currentPassword, newPassword } (yêu cầu auth)
 GET    /auth/me
 GET    /api/vaults           # list vault + default/current metadata
-POST   /api/vaults           # register existing directory {name,path,...}
+POST   /api/vaults           # create empty managed {name,create:true} hoặc register existing {name,path,...}
 PATCH  /api/vaults/:vaultId  # rename/config/default
 DELETE /api/vaults/:vaultId  # unregister only; never delete vault files
 GET    /api/files            # cây thư mục của selected vault

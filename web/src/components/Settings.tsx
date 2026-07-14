@@ -325,12 +325,22 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
   const defaultVaultId = useStore((state) => state.defaultVaultId);
   const initializeVaults = useStore((state) => state.initializeVaults);
   const switchVault = useStore((state) => state.switchVault);
+  const [createName, setCreateName] = useState('');
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
   const [deleteMode, setDeleteMode] = useState(s.vault.deleteMode ?? 'trash');
   const [browser, setBrowser] = useState<any>(null);
   const [error, setError] = useState('');
   const refresh = async () => { await initializeVaults(); await reload(); };
+  const createVault = async () => {
+    setError('');
+    try {
+      const result = await api.createVault(createName.trim());
+      await refresh();
+      setCreateName('');
+      await switchVault(result.vault.id);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create vault'); }
+  };
   const addVault = async () => {
     setError('');
     try {
@@ -369,7 +379,13 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
           </div>
         </div>
       ))}
-      <h3>Register existing vault</h3>
+      <h3>Create empty vault</h3>
+      <p className="setting-description">Create a new isolated server directory and sync history. Pair a local Obsidian vault only after selecting it.</p>
+      <Row name="Vault name" desc="Display name shown in the vault switcher and Central Sync">
+        <input className="text-input" value={createName} onChange={(event) => setCreateName(event.target.value)} />
+      </Row>
+      <button className="btn" disabled={!createName.trim()} onClick={() => void createVault()}>Create vault</button>
+      <h3>Register existing server vault</h3>
       <Row name="Name" desc="Display name shown in the vault switcher">
         <input className="text-input" value={name} onChange={(event) => setName(event.target.value)} />
       </Row>
