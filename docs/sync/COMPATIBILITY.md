@@ -37,6 +37,20 @@ blocked, and the assistant commits/pushes a full backup before switching Git to 
   snapshot. Never run an older binary against metadata it does not declare compatible and never restore Git alone.
 - A vault-only rebuild is a new history/vault identity and requires every device to re-pair/bootstrap.
 
+## Windows
+
+- **Recommended today:** use the native `central-vault-sync` plugin inside Windows Obsidian. It uses platform-neutral
+  Obsidian APIs, but Windows remains prerelease/unverified until the copied-vault lifecycle matrix passes on real NTFS.
+- Pair over trusted HTTPS while the intended WebObsidian vault is selected. The resulting credential is bound to that
+  vault. Never run the plugin and a headless client against the same local folder.
+- Native Windows `web-vault-sync` is not yet supported: current 0.1.x headless storage enforces POSIX `0700`/`0600`
+  modes, directory fsync semantics, and systemd packaging. Windows support requires DPAPI or validated user-only ACL
+  token storage, atomic-replace sharing-violation retries, reserved-name/trailing-dot/junction/case policy, `%LOCALAPPDATA%`
+  profiles, Windows service packaging, `windows-latest` CI, and real NTFS watcher/recovery evidence.
+- WSL2 can be used as a temporary headless workaround. Prefer a vault on WSL ext4; for `/mnt/c`, use
+  `web-vault-sync watch --polling` and validate case-only rename/watcher behavior. WSL evidence does not count as native
+  Windows acceptance.
+
 ## Native mobile limitations
 
 - Mobile synchronization runs on plugin load, app foreground/resume, manual Sync now, and bounded foreground

@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (first-class multi-vault deployed and verified with stable v3→v4 identity/bytes, rendered switching, scoped auth, detach/re-register, rollback and guest-reboot recovery; M41.7 remains open only for committed provenance and remote CI)
+Cập nhật lần cuối: 2026-07-14 (Phase 41 complete: first-class multi-vault commit `7ab4e4a` is deployed, pushed, and verified by CI 29300068248 attempt 2 plus real migration/rendered/auth/rollback/reboot/headless acceptance)
 
 ---
 
@@ -629,14 +629,22 @@ Cập nhật lần cuối: 2026-07-14 (first-class multi-vault deployed and veri
       `/vault/<vaultId>/note/...` and graph deep links with legacy default redirects.
 - [x] M41.6 Client compatibility: Protocol 1.0 plugin/headless unchanged after pair; pairing UI targets selected
       vault; device/conflict/doctor/metrics views scoped; docs and OpenAPI updated.
-- [~] M41.7 Verification: v3 migration/rollback, two simultaneous vault E2E and cross-vault denial, restart/watch,
+- [x] M41.7 Verification: v3 migration/rollback, two simultaneous vault E2E and cross-vault denial, restart/watch,
       duplicate/overlap/symlink path rejection, token/API-key isolation, browser switch, headless clients on both,
-      backup/restore, typecheck/build/full CI and deployed no-data-loss upgrade. Local/full evidence passes, including
-      a copied-real-production v3 migration with stable vaultId and byte-identical vault. `e2e/multi-vault.mjs` now
-      automates same-path isolation, forged token-header denial, API-key grant denial and restart persistence in CI;
-      actual production deploy, reboot recovery, remote CI and rollback drill remain before `[x]`.
+      backup/restore, typecheck/build/full CI and deployed no-data-loss upgrade. Commit `7ab4e4a` is deployed and pushed;
+      CI [29300068248](https://github.com/picassio/webobsidian/actions/runs/29300068248) attempt 2 passed both jobs,
+      including automated same-path isolation, forged token-header denial, API-key grant denial, restart persistence,
+      amd64/arm64 attested builds and non-root smoke. Real production migration/rendered/auth/rollback/reboot/headless
+      evidence also passes.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (M41 committed provenance + remote CI): committed first-class multi-vault as `7ab4e4a`, pushed `main`,
+  replaced the production working-tree bundle with a clean detached checkout of that exact commit, and re-verified
+  healthy sequence 708 plus clean permanent headless state. CI 29300068248 attempt 1 was cancelled after its first
+  multi-architecture Buildx step stalled far beyond the established baseline; attempt 2 passed typecheck/build, all
+  test suites, OpenAPI/docs/audit, browser/headless/multi-vault E2E, systemd verification, attested amd64/arm64
+  server/headless builds and non-root smoke. Phase 41 is complete; Windows/macOS/mobile/Community/stable-publication
+  gates remain in their existing Phase 36/37/40 rows.
 - 2026-07-14 (M41 production deployment and recovery acceptance): created stopped-service vault/data/source backups,
   deployed the source-built multi-vault image, and verified v3→v4 retained the default `vaultId`, sequence 701 and
   byte-identical vault while creating mode-0600 immutable migration state. A mount invariant caught a deployment-local
