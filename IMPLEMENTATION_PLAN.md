@@ -638,6 +638,11 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete: first-class multi-vaul
       evidence also passes.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (Community submission release discovery): the directory reported no release for manifest 0.1.12
+  even though tag/assets matched because GitHub still marked the release as prerelease. Promoted the existing 0.1.12
+  release in place to published, non-draft, non-prerelease and Latest without changing its tag or three verified asset
+  digests. Public manifest download matches default-branch `manifest.json`; plugin README-only commit `32d8597`
+  explains that 0.x remains beta software while the normal GitHub release flag is required for directory scanning.
 - 2026-07-14 (M41 committed provenance + remote CI): committed first-class multi-vault as `7ab4e4a`, pushed `main`,
   replaced the production working-tree bundle with a clean detached checkout of that exact commit, and re-verified
   healthy sequence 708 plus clean permanent headless state. CI 29300068248 attempt 1 was cancelled after its first

@@ -23,7 +23,7 @@ Current consumers:
 - Browser adapter: `web/src/lib/browser-sync-*.ts` (IndexedDB strict-durability state; device credential is
   an httpOnly SameSite=Strict cookie and never enters JavaScript/IndexedDB; legacy IndexedDB credentials are
   one-time rotated server-side before deletion).
-- Native plugin pre-release: [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync)
+- Native plugin Community-review release: [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync)
   (Vault API + `requestUrl` + SecretStorage; source public, Community Plugins review pending).
 - Headless adapter: public `web-vault-sync@0.1.0` under `clients/headless/`; a source patch serializes watcher
   drains and adds multi-vault systemd profile units, but that patch is not yet published.
