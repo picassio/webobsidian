@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry live with automated review pending on plugin 0.1.13 metadata/disclosure release)
+Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry live with automated review pending on normal plugin release 0.1.14)
 
 ---
 
@@ -542,7 +542,7 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry
       attach `main.js`, `manifest.json`, optional `styles.css`; private alpha + public beta.
 - [~] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
       feedback bằng version mới; verify cài/update trực tiếp từ Community Plugins. Entry đã live; automated review
-      đang chạy trên 0.1.13, reviewer approval + in-app install/update vẫn pending.
+      đang chạy trên 0.1.14, reviewer approval + in-app install/update vẫn pending.
 
 ## Phase 37 — Linux headless CLI/daemon & sidecar — FR-13
 - [x] M37.1 Tạo `clients/headless` npm package có `bin: web-vault-sync`; filesystem adapter + shared sync-core,
@@ -639,6 +639,12 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry
       evidence also passes.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (Community popout review response 0.1.14): automated review warned twice against global `document`
+  in foreground lifecycle registration. Replaced visibility/focus handling with Obsidian `activeDocument` and
+  `activeWindow`, bumped source/tag to `26cd75e`/0.1.14, and changed README/policy language from prerelease to
+  **Community review release**. Published 0.1.14 as normal, non-draft, non-prerelease and Latest with release notes;
+  public manifest/assets match and no forbidden global-document pattern remains. Release CI 29311542151 passed.
+  Node CI 29311540042 attempt 1 failed only from npm registry `ECONNRESET`; clean attempt 2 passed Node 20/22/24.
 - 2026-07-14 (Community automated review response 0.1.13): entry is live and pending automated/human review.
   Review warned that `authorUrl` pointed to the repository and recommended release notes plus explicit disclosure for
   vault enumeration and clipboard access. Published source/tag `ab77e27`/0.1.13 with organization-profile author URL;
