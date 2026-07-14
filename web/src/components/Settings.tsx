@@ -76,6 +76,7 @@ function Row({ name, desc, children }: { name: string; desc?: string; children: 
 function SyncSettings() {
   const vaults = useStore((state) => state.vaults);
   const activeVaultId = useStore((state) => state.activeVaultId);
+  const switchVault = useStore((state) => state.switchVault);
   const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? null;
   const [health, setHealth] = useState<SyncHealthResponse | null>(null);
   const [doctor, setDoctor] = useState<SyncDoctorResponse | null>(null);
@@ -164,12 +165,12 @@ function SyncSettings() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Conflict resolution failed'); }
     finally { setBusy(false); }
   };
-  const revoke = async (deviceId: string) => {
-    if (!confirm('Revoke this device? It will stop receiving and sending vault changes immediately.')) return;
+  const disconnect = async (device: Device) => {
+    if (!activeVault || !confirm(`Disconnect “${device.name}” from server vault “${activeVault.name}”? Its credential will be revoked immediately.`)) return;
     setBusy(true); setError('');
     try {
-      await api.revokeSyncDevice(deviceId);
-      if (localDevice?.deviceId === deviceId) {
+      await api.revokeSyncDevice(device.deviceId);
+      if (localDevice?.deviceId === device.deviceId) {
         await api.clearBrowserSyncDevice();
         await persistence.clearDevice();
         window.location.reload();
@@ -177,9 +178,11 @@ function SyncSettings() {
       }
       await refresh();
     }
-    catch (e) { setError(e instanceof Error ? e.message : 'Revocation failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Disconnect failed'); }
     finally { setBusy(false); }
   };
+  const activeDevices = devices.filter((device) => !device.revokedAt);
+  const revokedDeviceCount = devices.length - activeDevices.length;
   const exportDiagnostics = () => {
     const payload = JSON.stringify({
       exportedAt: new Date().toISOString(), protocolVersion: health?.protocolVersion ?? '1.0',
@@ -199,6 +202,17 @@ function SyncSettings() {
     <div>
       <h2>Central Sync</h2>
       <p className="desc">Revision-safe synchronization for this browser and paired Obsidian or Linux clients. Git remains backup-only.</p>
+      <Row name="Sync vault" desc="Health, pairing codes, conflicts, and connected devices below are scoped to this server vault.">
+        <select
+          className="text-input"
+          aria-label="Central Sync vault"
+          value={activeVaultId ?? ''}
+          disabled={busy || vaults.length === 0}
+          onChange={(event) => void switchVault(event.target.value).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not switch vault'))}
+        >
+          {vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
+        </select>
+      </Row>
       <Row name="Server status" desc={health ? `Sequence ${health.latestSequence ?? 0} · derived-index lag ${health.indexLagSequence ?? 0}` : undefined}>
         <span role="status" aria-live="polite">{state}</span>
       </Row>
@@ -289,15 +303,18 @@ function SyncSettings() {
           </div>
         </div>
       )}
-      <h3>Paired devices</h3>
-      {devices.length === 0 && <p className="desc">No paired devices.</p>}
-      {devices.map((device) => (
-        <Row key={device.deviceId} name={device.name} desc={`Last seen ${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'never'} · cursor ${device.acknowledgedSequence ?? 0}`}>
-          <button className="btn secondary" type="button" disabled={busy || Boolean(device.revokedAt)} onClick={() => revoke(device.deviceId)}>
-            {device.revokedAt ? 'Revoked' : 'Revoke'}
-          </button>
+      <h3>Connected devices {activeVault && `— ${activeVault.name}`} ({activeDevices.length})</h3>
+      {activeDevices.length === 0 && <p className="desc">No active devices are connected to this server vault.</p>}
+      {activeDevices.map((device) => (
+        <Row
+          key={device.deviceId}
+          name={device.name}
+          desc={`${device.deviceId} · Last seen ${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'never'} · cursor ${device.acknowledgedSequence ?? 0}`}
+        >
+          <button className="btn danger" type="button" disabled={busy} onClick={() => disconnect(device)}>Disconnect</button>
         </Row>
       ))}
+      {revokedDeviceCount > 0 && <p className="desc">{revokedDeviceCount} revoked device record(s) retained for audit; they have no sync access.</p>}
     </div>
   );
 }

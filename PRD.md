@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.10 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Phiên bản: 1.11 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Changelog 1.11 (sync vault/device control): Central Sync settings có vault dropdown tại chỗ, luôn scope status,
+> pairing, conflict và device list theo vault đang chọn. UI chỉ liệt kê active connected devices làm danh sách chính,
+> hiện name/id/last-seen/cursor và nút Disconnect/revoke tức thời; revoked history chỉ hiện summary để không nhầm với
+> kết nối đang hoạt động. Plugin không có cross-vault dropdown vì token bind một vault; đổi vault bắt buộc Unpair và
+> dùng code mới từ server vault đã chọn.
 > Changelog 1.10 (safe vault pairing + bootstrap traffic): mỗi local vault không liên quan phải map 1:1 vào một
 > server vault đã tạo/register trước; code pairing bind server vault đang chọn và UI phải hiện rõ name/id/sequence,
 > cảnh báo code không tự tạo vault và yêu cầu confirm trước khi hội tụ vào vault đã có dữ liệu. Device name không phải

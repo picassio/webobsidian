@@ -121,6 +121,10 @@ async function waitForServer() {
 async function verifyExternalPairingCodeUi(page) {
   await page.locator('button[title="Settings"]').first().click();
   await page.getByRole('button', { name: 'Central Sync' }).click();
+  const syncVault = page.getByLabel('Central Sync vault');
+  assert.match(await syncVault.inputValue(), /^vault_/u);
+  await page.getByText(/Connected devices .* \(2\)/u).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Disconnect' }).count(), 2);
   await page.getByLabel('Pairing device name').fill('Browser E2E external client');
   page.once('dialog', async (dialog) => {
     assert.match(dialog.message(), /device name does not create a vault/i);

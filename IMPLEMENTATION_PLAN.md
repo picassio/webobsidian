@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.8 complete/deployed: explicit vault target confirmation, 600/min bootstrap budget, independent Test bucket, and plugin 0.1.15; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-14 (M41.9 in progress: colocated Central Sync vault dropdown and active-device Disconnect controls; M36.10 Community review pending)
 
 ---
 
@@ -641,6 +641,9 @@ Cập nhật lần cuối: 2026-07-14 (M41.8 complete/deployed: explicit vault t
       no-auto-create/convergence warning before code issuance; expose paired vault ID in plugin settings; separate
       handshake/Test control throttling from a 600 request/minute/device bootstrap transfer budget; preserve tight
       pairing limits, Retry-After, Protocol 1.0 request shapes, and add regression coverage before deployment.
+- [~] M41.9 Central Sync vault/device control (PRD 1.11): colocated vault dropdown scopes health/pairing/conflicts/
+      devices; active connected devices show name/id/last-seen/cursor and explicit Disconnect revocation; revoked
+      history is summarized separately. Plugin remains one-vault-token-bound and changes target only by Unpair/new code.
 
 ### Nhật ký tiến độ
 - 2026-07-14 (pairing safety + bootstrap throttling): PRD advanced to 1.10. Server/Web commit `b9e6cae`
