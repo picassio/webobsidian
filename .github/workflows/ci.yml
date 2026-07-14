@@ -70,11 +70,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Verify Compose healthcheck and multi-vault mount
+      - name: Verify Compose healthcheck and normalized vault mounts
         run: |
-          test "$(docker compose config --format json | jq -r '.services.webobsidian.healthcheck.test[-1]')" = \
+          compose_json="$(docker compose config --format json)"
+          test "$(jq -r '.services.webobsidian.healthcheck.test[-1]' <<<"$compose_json")" = \
             "http://127.0.0.1:8787/healthz"
-          docker compose config --format json | jq -e '.services.webobsidian.volumes[] | select(.target == "/vaults")' >/dev/null
+          test "$(jq -r '.services.webobsidian.environment.VAULT_PATH' <<<"$compose_json")" = "/vaults/default"
+          for target in /vaults /vaults/default /vault; do
+            jq -e --arg target "$target" '.services.webobsidian.volumes[] | select(.target == $target)' <<<"$compose_json" >/dev/null
+          done
+          test "$(jq -r '.services.webobsidian.volumes[] | select(.target == "/vaults/default") | .source' <<<"$compose_json")" = \
+            "$(jq -r '.services.webobsidian.volumes[] | select(.target == "/vault") | .source' <<<"$compose_json")"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

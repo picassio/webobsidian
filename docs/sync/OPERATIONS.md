@@ -39,7 +39,8 @@ Take a crash-consistent backup while the service is stopped (preferred), or snap
   (identity, journal, transactions, revisions, blobs, bases, conflicts, devices);
 - `data/settings.json` and the deployment's secret material/credential store.
 
-For Compose, inspect the live container mounts and confirm `/vault`, `/vaults`, and `/data` resolve to the intended
+For Compose, inspect the live container mounts and confirm canonical `/vaults/default`, parent `/vaults`, compatibility
+alias `/vault`, and `/data` resolve to the intended
 persistent sources before backup and before clients resume. Set `DATA_HOST_PATH` when host-visible data snapshots are
 required; do not assume a deployment-local override survived a source replacement.
 

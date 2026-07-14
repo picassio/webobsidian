@@ -13,17 +13,18 @@ services:
       WEBOBSIDIAN_PASSWORD: ${WEBOBSIDIAN_PASSWORD:-}
       # File-watch mode: auto (native + polling fallback) | polling. See .env.example.
       WEBOBSIDIAN_WATCH: ${WEBOBSIDIAN_WATCH:-auto}
-      VAULT_PATH: /vault
+      VAULT_PATH: /vaults/default
       DATA_DIR: /data
-      # /vault preserves the legacy default; /vaults is the optional parent for additional vaults.
-      ALLOWED_ROOTS: /vault,/vaults
+      # All canonical vault roots live below /vaults; /vault remains a same-source legacy alias.
+      ALLOWED_ROOTS: /vaults,/vault
       NODE_ENV: production
     volumes:
-      # Your vault on the host (VAULT_HOST_PATH in .env) → /vault in the container.
-      # Defaults to the bundled sample vault so `docker compose up` works immediately.
-      - ${VAULT_HOST_PATH:-./sample-vault}:/vault
-      # Optional common parent for first-class multi-vault registration.
+      # Common parent for every canonical vault root.
       - ${VAULTS_HOST_PATH:-./sample-vaults}:/vaults
+      # Default vault source is mounted canonically below /vaults and at /vault only as a legacy rollback alias.
+      # The child bind intentionally overrides /vaults/default from the parent mount.
+      - ${VAULT_HOST_PATH:-./sample-vault}:/vaults/default
+      - ${VAULT_HOST_PATH:-./sample-vault}:/vault
       # Persisted settings.json + per-vault sync/search/share/workspace state.
       # Set DATA_HOST_PATH to an absolute host directory for backup-visible bind storage.
       - ${DATA_HOST_PATH:-webobsidian-data}:/data

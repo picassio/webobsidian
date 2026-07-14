@@ -139,7 +139,7 @@ function defaultVaultFs() {
 async function defaults(): Promise<PersistedSettings> {
   const state = await new VaultStateStore(config.dataDir).loadOrCreate();
   const vault = defaultVaultFs();
-  const record = VaultRecordSchema.parse({ id: state.vaultId, name: path.basename(vault.path) || 'Vault', storage: 'legacy', ...vault });
+  const record = VaultRecordSchema.parse({ id: state.vaultId, name: 'Default', storage: 'legacy', ...vault });
   const base = SettingsSchema.parse({ version: 4, vaults: { defaultVaultId: record.id, items: [record] } });
   base.auth.jwtSecret = randomBytes(48).toString('hex');
   return base;
@@ -221,7 +221,7 @@ async function migrateLegacy(input: Record<string, unknown>): Promise<PersistedS
   const state = await new VaultStateStore(config.dataDir).loadOrCreate();
   const record = VaultRecordSchema.parse({
     id: state.vaultId,
-    name: path.basename(path.resolve(legacy.vault.path)) || 'Vault',
+    name: 'Default',
     storage: 'legacy',
     ...legacy.vault,
     sync: legacy.sync,

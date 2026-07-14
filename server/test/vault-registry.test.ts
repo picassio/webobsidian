@@ -23,6 +23,7 @@ test('vault registry rejects unsafe roots and unregisters without deleting files
   const initial = await settingsModule.getPersistedSettings();
   const original = initial.vaults.items[0];
   assert.equal(original.storage, 'legacy');
+  assert.equal(original.name, 'Default');
 
   const managed = await registry.createManagedVault('Managed Personal Notes');
   assert.equal(managed.storage, 'isolated');

@@ -37,7 +37,7 @@ COPY --from=build /app/packages/sync-core/dist ./packages/sync-core/dist
 ENV PORT=8787 \
     HOST=0.0.0.0 \
     DATA_DIR=/data \
-    VAULT_PATH=/vault \
+    VAULT_PATH=/vaults/default \
     ALLOWED_ROOTS=/vault,/vaults \
     NODE_OPTIONS=--max-old-space-size=4096
 

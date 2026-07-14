@@ -86,7 +86,9 @@ data/shares.json
 data/uistate.json
 ```
 
-Additional vaults use:
+New deployments name the initial record `Default` and use canonical root `/vaults/default`; `/vault` may remain mounted
+as a same-source compatibility alias. Existing installations are never moved implicitly: normalize only with a stopped-
+service backup, byte manifest, and atomic path update. Additional vault metadata uses:
 
 ```text
 data/vaults/<vaultId>/sync/
@@ -106,7 +108,8 @@ entire data directory before an upgrade.
 - Central Sync health, doctor, devices, conflicts and metrics are scoped to the selected vault.
 - A newly registered non-empty vault starts `backup-required`; complete the backup migration before issuing pairing codes.
 - Compose uses a managed data volume by default. Set `DATA_HOST_PATH` to a backup-visible host directory when host-level
-  snapshots are required, and verify the live container's `/data`, `/vault`, and `/vaults` mount sources before resuming clients.
+  snapshots are required, and verify the live container's `/data`, `/vaults`, `/vaults/default`, and compatibility `/vault`
+  mount sources before resuming clients.
 - Unregistering the default or final active vault is rejected.
 - Unregistration marks the target runtime draining, refuses new request leases, disconnects sync sockets, waits for accepted
   HTTP work, stops the watcher/Git timer, flushes the coordinator projection and then detaches the registry entry. A drain

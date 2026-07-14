@@ -97,7 +97,7 @@ deployment settings live in **`.env`** (git-ignored) — you never edit the trac
 
 ```bash
 # .env
-VAULT_HOST_PATH=/abs/path/to/your/ObsidianVault   # must exist; bind-mounted to /vault
+VAULT_HOST_PATH=/abs/path/to/your/ObsidianVault   # mounted at /vaults/default; /vault is a legacy alias
 DATA_HOST_PATH=/abs/path/to/webobsidian-data      # optional bind; otherwise a managed volume
 WEBOBSIDIAN_PASSWORD=use-a-strong-password
 HTTP_BIND=0.0.0.0                                  # 127.0.0.1 to expose only to localhost
@@ -107,14 +107,15 @@ HTTP_PORT=8787
 Then `docker compose up -d --build`. Your vault can be a plain folder or a `git clone`
 (Git LFS is supported for attachments).
 
-For multiple vaults, mount their common parent and register each child path in **Settings → Vault & Files**:
+For multiple vaults, mount their common parent. Create empty vaults by name or register existing children in **Settings → Vault & Files**:
 
 ```bash
 # .env
 VAULTS_HOST_PATH=/abs/path/to/ObsidianVaults   # mounted at /vaults
 ```
 
-Register `/vaults/Personal`, `/vaults/Work`, etc. Roots must be distinct and non-overlapping. See
+The default root is `/vaults/default`; managed creation allocates siblings such as `/vaults/personal-<suffix>`.
+Register existing `/vaults/Personal`, `/vaults/Work`, etc. Roots must be distinct and non-overlapping. See
 [Multiple vaults](docs/MULTI_VAULT.md).
 
 ### Behind a reverse proxy (TLS)
@@ -176,8 +177,8 @@ Useful scripts:
 
 | Var | Default | Description |
 |-----|---------|-------------|
-| `VAULT_HOST_PATH` | `./sample-vault` | Host path bind-mounted to `/vault` |
-| `VAULTS_HOST_PATH` | `./sample-vaults` | Optional host parent bind-mounted to `/vaults` for additional vaults |
+| `VAULT_HOST_PATH` | `./sample-vault` | Default vault mounted at `/vaults/default` and aliased at `/vault` for rollback |
+| `VAULTS_HOST_PATH` | `./sample-vaults` | Host parent mounted at `/vaults` for every canonical vault root |
 | `DATA_HOST_PATH` | managed `webobsidian-data` volume | Optional host directory bind-mounted to `/data` for settings and all vault metadata |
 | `HTTP_BIND` | `0.0.0.0` | Host interface to publish on (`127.0.0.1` = local only) |
 | `HTTP_PORT` | `8787` | Host port mapped to container `8787` |

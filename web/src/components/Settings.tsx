@@ -384,8 +384,10 @@ function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
       <Row name="Vault name" desc="Display name shown in the vault switcher and Central Sync">
         <input className="text-input" value={createName} onChange={(event) => setCreateName(event.target.value)} />
       </Row>
-      <button className="btn" disabled={!createName.trim()} onClick={() => void createVault()}>Create vault</button>
-      <h3>Register existing server vault</h3>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '8px 0 20px' }}>
+        <button className="btn" disabled={!createName.trim()} onClick={() => void createVault()}>Create vault</button>
+      </div>
+      <h3 style={{ marginTop: 0 }}>Register existing server vault</h3>
       <Row name="Name" desc="Display name shown in the vault switcher">
         <input className="text-input" value={name} onChange={(event) => setName(event.target.value)} />
       </Row>

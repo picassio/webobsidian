@@ -1,7 +1,12 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.12 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Phiên bản: 1.13 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Changelog 1.13 (normalized default vault layout): default vault hiển thị tên `Default` và canonical container root
+> `/vaults/default`, cùng sibling với mọi managed vault. `/vault` chỉ còn compatibility alias bind cùng source để
+> rollback/legacy settings không mất dữ liệu; migrated default vẫn giữ legacy metadata tại `data/sync`. Production move
+> phải stopped-service backup + byte manifest + atomic settings/env update + forward/alias verification. Create-vault
+> action có spacing/grouping nhất quán với register-existing.
 > Changelog 1.12 (user-created empty vaults): owner có thể nhập tên và tạo server vault rỗng trực tiếp trong
 > Settings → Vault & Files, không cần shell/path thủ công. Server chọn managed root nằm trong allowlist nhưng không
 > nằm bên trong registered vault, tạo slug+random directory mode hạn chế, register isolated runtime atomically và chỉ
