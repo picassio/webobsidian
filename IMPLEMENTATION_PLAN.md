@@ -642,9 +642,11 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; production now enforce
 - 2026-07-14 (isolated desktop vault onboarding): clarified that every unrelated local Obsidian vault must pair to a
   separately registered server vault; plugin pairing never auto-registers or merges vault identities. Backed up the live
   registry, registered an empty isolated `Desktop Obsidian` vault, and verified sequence 0, zero index lag, writable
-  health, rendered selector switching, and one-use pairing-code creation through trusted HTTPS. The original vault
-  remained sequence 761 and healthy. A fresh authenticated browser shows both healthy; stale browser sessions should
-  hard-refresh or sign out/in before pairing.
+  health, rendered selector switching, and one-use pairing-code creation through trusted HTTPS. A code generated while
+  the default vault was still selected was then used by the desktop client: it committed 30 creates + 10 mkdirs before
+  rate limiting exposed the wrong binding. The device was revoked; audit proved no modification/collision with existing
+  entries; a stopped-service backup preceded normal revisioned 30-delete + 10-rmdir cleanup. Default server/Pi PARA
+  canonical paths are clean at sequence/cursor 845, while the isolated desktop vault remains empty at sequence 0.
 - 2026-07-14 (Community popout review response 0.1.14): automated review warned twice against global `document`
   in foreground lifecycle registration. Replaced visibility/focus handling with Obsidian `activeDocument` and
   `activeWindow`, bumped source/tag to `26cd75e`/0.1.14, and changed README/policy language from prerelease to
