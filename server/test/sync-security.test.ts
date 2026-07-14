@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
 import test from 'node:test';
-import { syncRateLimit, requireSyncAdminCsrf } from '../src/middleware/sync-rate-limit.js';
+import { SYNC_RATE_LIMITS, syncRateLimit, requireSyncAdminCsrf } from '../src/middleware/sync-rate-limit.js';
 
 async function withServer(app: express.Express, run: (base: string) => Promise<void>) {
   const server = http.createServer(app);
@@ -29,6 +29,20 @@ test('sync rate limiter emits canonical retryable 429 and Retry-After', async ()
     assert.equal(body.error.code, 'rate_limited');
     assert.equal(body.error.retryable, true);
     assert.ok(body.error.details.retryAfter >= 1);
+  });
+});
+
+test('control probes remain independent from bootstrap transfer throttling', async () => {
+  assert.equal(SYNC_RATE_LIMITS.deviceControlPerMinute, 120);
+  assert.equal(SYNC_RATE_LIMITS.deviceTransferPerMinute, 600);
+  const app = express();
+  app.get('/control', syncRateLimit('test-control', 1, () => 'same-device'), (_req, res) => res.json({ ok: true }));
+  app.get('/transfer', syncRateLimit('test-transfer', 1, () => 'same-device'), (_req, res) => res.json({ ok: true }));
+  await withServer(app, async (base) => {
+    assert.equal((await fetch(`${base}/transfer`)).status, 200);
+    assert.equal((await fetch(`${base}/transfer`)).status, 429);
+    assert.equal((await fetch(`${base}/control`)).status, 200);
+    assert.equal((await fetch(`${base}/control`)).status, 429);
   });
 });
 

@@ -639,7 +639,9 @@ not an administrator and may be compromised, so server validation remains mandat
 - Path traversal and symlink escape checks on every operation and blob materialization.
 - Validate normalized UTF-8 paths; reject `.git`, internal sync paths, NUL, absolute paths, and traversal.
 - Advertised request/batch/chunk limits enforced per endpoint/device. Defaults: 1 MiB inline text, 8 MiB blob
-  chunk, 100 operations/batch, 120 requests/minute/device, and configurable total upload/vault quotas.
+  chunk, 100 operations/batch, and 600 bootstrap/data requests/minute/device. Handshake/Test uses an independent
+  120 requests/minute/device control bucket so diagnostics remain available during transfer; pairing stays at the
+  tighter 10 attempts/minute/IP boundary. Every 429 advertises Retry-After.
 - SHA-256 verification before accepting or applying content.
 - Audit actor, operation, entryId/path, base/result revision, outcome, and timestamp without content or credentials.
 - Origin checks and CSRF protection apply to session-authenticated admin mutation endpoints; device-token endpoints

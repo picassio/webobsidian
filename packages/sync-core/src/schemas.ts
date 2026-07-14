@@ -5,7 +5,7 @@ export const DEFAULT_LIMITS = {
   inlineTextBytes: 1_048_576,
   blobChunkBytes: 8_388_608,
   maxOperationsPerBatch: 100,
-  requestsPerMinute: 120,
+  requestsPerMinute: 600,
   manifestPageSize: 1_000,
   manifestTtlSec: 900,
   uploadTtlSec: 86_400,

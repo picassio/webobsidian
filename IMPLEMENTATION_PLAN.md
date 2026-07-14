@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; production now enforces/documented one-local-vault ↔ one-server-vault operation; M36.10 review pending on 0.1.14)
+Cập nhật lần cuối: 2026-07-14 (M41.8 in progress: explicit pairing target/confirmation plus bootstrap-safe split rate limits after wrong-vault incident; M36.10 review pending on 0.1.14)
 
 ---
 
@@ -637,6 +637,10 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; production now enforce
       including automated same-path isolation, forged token-header denial, API-key grant denial, restart persistence,
       amd64/arm64 attested builds and non-root smoke. Real production migration/rendered/auth/rollback/reboot/headless
       evidence also passes.
+- [~] M41.8 Pairing safety follow-up (PRD 1.10): show selected target vault name/id/sequence and explicit
+      no-auto-create/convergence warning before code issuance; expose paired vault ID in plugin settings; separate
+      handshake/Test control throttling from a 600 request/minute/device bootstrap transfer budget; preserve tight
+      pairing limits, Retry-After, Protocol 1.0 request shapes, and add regression coverage before deployment.
 
 ### Nhật ký tiến độ
 - 2026-07-14 (isolated desktop vault onboarding): clarified that every unrelated local Obsidian vault must pair to a

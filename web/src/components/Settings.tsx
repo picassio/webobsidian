@@ -4,6 +4,7 @@ import { useStore } from '../lib/store';
 import { api, type SyncDoctorResponse, type SyncHealthResponse } from '../lib/api';
 import Icon from './Icon';
 import { IndexedDbSyncPersistence, type BrowserDeviceState } from '../lib/sync-db';
+import { pairingConfirmation, pairingTargetDescription } from '../lib/pairing-target';
 
 type Section = 'vault' | 'sync' | 'git' | 'api' | 'sharing' | 'plugins' | 'appearance' | 'account' | 'about';
 
@@ -73,6 +74,9 @@ function Row({ name, desc, children }: { name: string; desc?: string; children: 
 }
 
 function SyncSettings() {
+  const vaults = useStore((state) => state.vaults);
+  const activeVaultId = useStore((state) => state.activeVaultId);
+  const activeVault = vaults.find((vault) => vault.id === activeVaultId) ?? null;
   const [health, setHealth] = useState<SyncHealthResponse | null>(null);
   const [doctor, setDoctor] = useState<SyncDoctorResponse | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -118,7 +122,10 @@ function SyncSettings() {
     } finally { setBusy(false); }
   };
   const createPairingCode = async () => {
-    setBusy(true); setError(''); setPairingCode(null);
+    setError(''); setPairingCode(null);
+    if (!activeVault) { setError('Select the target server vault before creating a pairing code.'); return; }
+    if (!confirm(pairingConfirmation(activeVault, health?.latestSequence ?? 0))) return;
+    setBusy(true);
     try {
       const created = await api.createSyncPairingCode(pairingHint.trim() || 'New sync client');
       setPairingCode({ code: created.code, expiresAt: created.expiresAt });
@@ -209,22 +216,29 @@ function SyncSettings() {
           {busy ? 'Working…' : localDevice ? 'Paired' : 'Pair this browser'}
         </button>
       </Row>
-      <Row name="Pair Obsidian or headless client" desc="Create a 10-minute, one-use code. The device receives its own revocable credential.">
+      <Row
+        name="Pair Obsidian or headless client"
+        desc={activeVault
+          ? pairingTargetDescription(activeVault, health?.latestSequence ?? null)
+          : 'Select the target server vault before creating a pairing code.'}
+      >
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <input
             className="text-input"
             aria-label="Pairing device name"
+            placeholder="Device name (not vault name)"
             value={pairingHint}
             onChange={(event) => setPairingHint(event.target.value)}
             style={{ width: 180 }}
           />
-          <button className="btn" type="button" disabled={busy} onClick={createPairingCode}>
-            {busy ? 'Working…' : 'Create pairing code'}
+          <button className="btn" type="button" disabled={busy || !activeVault || !health} onClick={createPairingCode}>
+            {busy ? 'Working…' : `Create code for ${activeVault?.name ?? 'selected vault'}`}
           </button>
         </div>
       </Row>
-      {pairingCode && (
+      {pairingCode && activeVault && (
         <div style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 8, padding: 12, margin: '12px 0' }}>
+          <p className="desc" style={{ marginTop: 0 }}><strong>Target:</strong> {activeVault.name} · <code>{activeVault.id}</code>. Pairing will converge the client only with this vault.</p>
           <label>
             One-use pairing code
             <input className="text-input" aria-label="One-use pairing code" readOnly value={pairingCode.code} style={{ width: '100%', marginTop: 6 }} />

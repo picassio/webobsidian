@@ -16,7 +16,7 @@ import {
 import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
 import { BROWSER_SYNC_COOKIE, browserSyncCookie, requireSecureSyncTransport, requireSyncDevice, syncError } from '../middleware/sync-auth.js';
-import { deviceRateLimit, pairingRateLimit, preAuthSyncRateLimit, requireSyncAdminCsrf, uploadRateLimit } from '../middleware/sync-rate-limit.js';
+import { deviceControlRateLimit, deviceRateLimit, pairingRateLimit, preAuthSyncRateLimit, requireSyncAdminCsrf, uploadRateLimit } from '../middleware/sync-rate-limit.js';
 import {
   getSyncBlobStore, getSyncCoordinator, getSyncDeviceStore, getSyncMaintenanceStatus, getSyncRuntime, getSyncUploadStore,
   pairSyncDeviceAcrossVaults, rotateSyncTokenAcrossVaults,
@@ -107,7 +107,7 @@ syncRouter.post('/pair', pairingRateLimit, asyncHandler(async (req, res) => {
   }
 }));
 
-syncRouter.post('/handshake', requireSyncDevice, deviceRateLimit, asyncHandler(async (req, res) => {
+syncRouter.post('/handshake', requireSyncDevice, deviceControlRateLimit, asyncHandler(async (req, res) => {
   if (rejectUnsupportedProtocol(req.body, res)) return;
   const parsed = HandshakeRequestSchema.safeParse(req.body);
   if (!parsed.success) return syncError(res, 400, 'invalid_request', 'Invalid handshake', false, { issues: parsed.error.issues });

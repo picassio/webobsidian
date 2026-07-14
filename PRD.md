@@ -1,7 +1,13 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.9 · Cập nhật: 2026-07-13 · Trạng thái: Draft
+> Phiên bản: 1.10 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Changelog 1.10 (safe vault pairing + bootstrap traffic): mỗi local vault không liên quan phải map 1:1 vào một
+> server vault đã tạo/register trước; code pairing bind server vault đang chọn và UI phải hiện rõ name/id/sequence,
+> cảnh báo code không tự tạo vault và yêu cầu confirm trước khi hội tụ vào vault đã có dữ liệu. Device name không phải
+> vault name vì nhiều desktop/mobile device có thể cố ý share cùng server vault. Rate limit tách control/test khỏi
+> transfer bootstrap: handshake/Test có bucket riêng; data-plane mặc định 600 request/phút/device với Retry-After,
+> trong khi pairing vẫn giới hạn chặt. Sync Protocol 1.0 request shape không đổi.
 > Changelog 1.9 (first-class multi-vault): một process WebObsidian quản lý nhiều vault độc lập và đồng thời.
 > Mỗi vault có stable `vaultId`, tên/path/config, SyncCoordinator+journal/device/blob/conflict riêng, search/link/file
 > index, watcher, Git backup, plugin state, workspace và public-share namespace riêng. Auth người dùng vẫn global;
@@ -445,6 +451,9 @@ Thiết kế chi tiết và thứ tự triển khai: [`docs/SYNC_ROADMAP.md`](do
   ngoài vault và token file mode 0600/systemd credential.
 - **Device auth:** pairing code random, hash, TTL ngắn, single-use → device token scope `sync`, bind đúng một
   `vaultId`; token hash server-side, list/revoke/last-seen theo vault; không dùng master password hay broad Agent key.
+  Pairing workflow bắt buộc create/register + select server vault trước; UI tạo code hiện name/id/sequence target và
+  xác nhận rõ rằng code không auto-create vault. Một local vault độc lập không được pair vào server vault của local
+  vault khác; nhiều device chỉ share một server vault khi người dùng chủ ý sync cùng logical vault.
 - **Storage JSON-only:** default vault giữ `data/sync/` để rollback-compatible; mỗi vault bổ sung dùng
   `data/vaults/<vaultId>/sync/`. Mỗi namespace gồm vault metadata, revision index, devices, idempotency cache, write-ahead
   transaction intents, segmented atomic JSON journal, retained merge bases/blobs, incomplete uploads và conflicts.
@@ -471,6 +480,8 @@ Thiết kế chi tiết và thứ tự triển khai: [`docs/SYNC_ROADMAP.md`](do
   conflict copy. Startup phát hiện journal hỏng phải vào degraded/read-only thay vì tự truncate.
 - **Sync performance**: manifest paginate cho 10k note/50k file; no-change catch-up LAN <500ms sau kết nối;
   clean active client thấy text revision mới trong ≤2s điều kiện bình thường; stream file 1GB với bounded memory.
+  Bootstrap transfer không bị throttle ở ngưỡng chỉ ~30 file: data-plane mặc định 600 request/phút/device; Test/
+  handshake dùng bucket control riêng để vẫn chẩn đoán được trong lúc upload; 429 luôn có Retry-After và client backoff.
 - **Sync compatibility**: protocol major version explicit; server hỗ trợ current + previous minor trong rolling
   upgrade; major mismatch fail-safe. Desktop/mobile/headless đều có conformance test chung.
 - **Khả chuyển**: chạy được trên Linux/macOS, ARM & x86.
@@ -517,7 +528,7 @@ DELETE /api/shares/{id}       # xoá share
 
 ### Central Sync API (device-token auth) — `/api/sync/v1`
 ```
-POST   /pairing-codes                # web-admin session: one-time code
+POST   /pairing-codes                # web-admin: one-time code bound to explicitly displayed selected vault
 POST   /pair                         # rate-limited code → bound device token
 POST   /handshake | /ws-tickets      # protocol/limits/sequence | one-use WS ticket
 GET    /manifest                     # snapshot-consistent paginated metadata

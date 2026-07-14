@@ -17,7 +17,7 @@
       "inlineTextBytes": 1048576,
       "blobChunkBytes": 8388608,
       "maxOperationsPerBatch": 100,
-      "requestsPerMinute": 120,
+      "requestsPerMinute": 600,
       "manifestPageSize": 1000,
       "manifestTtlSec": 900,
       "uploadTtlSec": 86400

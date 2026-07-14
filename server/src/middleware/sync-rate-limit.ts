@@ -51,8 +51,18 @@ export function requireSyncAdminCsrf(req: Request, res: Response, next: NextFunc
   next();
 }
 
-export const preAuthSyncRateLimit = syncRateLimit('sync-ip', 300, (req) => req.ip ?? 'unknown');
-export const pairingRateLimit = syncRateLimit('pairing', 10, (req) => req.ip ?? 'unknown');
+export const SYNC_RATE_LIMITS = Object.freeze({
+  ipPerMinute: 1_800,
+  pairingPerMinute: 10,
+  deviceControlPerMinute: 120,
+  deviceTransferPerMinute: 600,
+  uploadPerMinute: 600,
+});
+
+export const preAuthSyncRateLimit = syncRateLimit('sync-ip', SYNC_RATE_LIMITS.ipPerMinute, (req) => req.ip ?? 'unknown');
+export const pairingRateLimit = syncRateLimit('pairing', SYNC_RATE_LIMITS.pairingPerMinute, (req) => req.ip ?? 'unknown');
 const deviceKey = (req: Request) => req.syncDevice ? `${req.syncVaultId ?? 'unknown'}:${req.syncDevice.deviceId}` : (req.ip ?? 'unknown');
-export const deviceRateLimit = syncRateLimit('device', 120, deviceKey);
-export const uploadRateLimit = syncRateLimit('upload', 300, deviceKey);
+// Keep Test/handshake diagnostics available while a first sync consumes its independent transfer budget.
+export const deviceControlRateLimit = syncRateLimit('device-control', SYNC_RATE_LIMITS.deviceControlPerMinute, deviceKey);
+export const deviceRateLimit = syncRateLimit('device-transfer', SYNC_RATE_LIMITS.deviceTransferPerMinute, deviceKey);
+export const uploadRateLimit = syncRateLimit('upload', SYNC_RATE_LIMITS.uploadPerMinute, deviceKey);
