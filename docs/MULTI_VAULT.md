@@ -51,8 +51,10 @@ retained so registering the same real path again restores its original `vaultId`
 ## Sync clients
 
 Sync Protocol 1.0 request shapes and client commands are unchanged. Create/register the server vault first, select it,
-then create a pairing code. The Central Sync page displays and confirms the exact target name, stable ID, sequence, and
-whether the vault is empty or already populated. The pairing code and resulting token choose the vault; the device-name
+then create a pairing code. Central Sync includes its own vault dropdown; health, pairing, conflicts, and connected
+devices are all scoped to that selection. It displays and confirms the exact target name, stable ID, sequence, and
+whether the vault is empty or already populated. Active devices show identity/last-seen/cursor and can be disconnected
+immediately; revoked records remain audit history without appearing as connected. The pairing code and resulting token choose the vault; the device-name
 hint never creates or selects one.
 
 Use a one-to-one mapping: one local Obsidian vault is a replica of one registered server vault. An installed plugin does

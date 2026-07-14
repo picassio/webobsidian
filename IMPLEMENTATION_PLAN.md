@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.9 in progress: colocated Central Sync vault dropdown and active-device Disconnect controls; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-14 (M41.9 complete/deployed: Central Sync vault dropdown plus active-device Disconnect controls; M36.10 Community review pending)
 
 ---
 
@@ -641,11 +641,19 @@ Cập nhật lần cuối: 2026-07-14 (M41.9 in progress: colocated Central Sync
       no-auto-create/convergence warning before code issuance; expose paired vault ID in plugin settings; separate
       handshake/Test control throttling from a 600 request/minute/device bootstrap transfer budget; preserve tight
       pairing limits, Retry-After, Protocol 1.0 request shapes, and add regression coverage before deployment.
-- [~] M41.9 Central Sync vault/device control (PRD 1.11): colocated vault dropdown scopes health/pairing/conflicts/
+- [x] M41.9 Central Sync vault/device control (PRD 1.11): colocated vault dropdown scopes health/pairing/conflicts/
       devices; active connected devices show name/id/last-seen/cursor and explicit Disconnect revocation; revoked
       history is summarized separately. Plugin remains one-vault-token-bound and changes target only by Unpair/new code.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (Central Sync vault/device controls): PRD 1.11 and commit `3b2c81b` add a colocated vault dropdown
+  inside Central Sync; health, code creation, conflicts and devices remount under the selected vault. The main device
+  list now shows only active connections with name, stable ID, last-seen and cursor plus explicit Disconnect/revoke;
+  revoked records are audit-only summary. Browser E2E asserts the dropdown, two connected devices and Disconnect
+  controls. Web tests/typecheck/build/docs pass; CI 29324273253 attempt 2 passes both jobs (attempt 1 was cancelled
+  after an abnormally stalled unchanged multi-arch Buildx step). Source-built production deployment preserved all
+  mounts and rendered Desktop Obsidian (0 devices) ↔ default vault (1 active device) switching; it was left selected
+  on Desktop Obsidian, and Pi PARA remains clean with its timer active.
 - 2026-07-14 (pairing safety + bootstrap throttling): PRD advanced to 1.10. Server/Web commit `b9e6cae`
   displays exact selected vault name/id/sequence, states that codes never create vaults, distinguishes empty bootstrap
   from populated convergence, and requires confirmation before code issuance. Transfer/upload budget is now 600
