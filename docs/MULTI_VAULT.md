@@ -50,8 +50,10 @@ retained so registering the same real path again restores its original `vaultId`
 
 ## Sync clients
 
-Sync Protocol 1.0 and client commands are unchanged. Create a pairing code while the intended vault is active, then
-pair the plugin/headless client normally. The pairing code and resulting token choose the vault.
+Sync Protocol 1.0 request shapes and client commands are unchanged. Create/register the server vault first, select it,
+then create a pairing code. The Central Sync page displays and confirms the exact target name, stable ID, sequence, and
+whether the vault is empty or already populated. The pairing code and resulting token choose the vault; the device-name
+hint never creates or selects one.
 
 Use a one-to-one mapping: one local Obsidian vault is a replica of one registered server vault. An installed plugin does
 not register the local directory as a new server vault automatically. Register and select an isolated server vault before
