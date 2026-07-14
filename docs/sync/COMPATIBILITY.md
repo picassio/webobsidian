@@ -5,7 +5,7 @@
 | Component | Release line | Protocol | Supported runtime/platform | Status |
 |---|---:|---:|---|---|
 | WebObsidian server/browser | 0.1.x | 1.0 | Node 20/22; current Chromium/Firefox/Safari | Local stable gates passing; public stable release pending. |
-| `central-vault-sync` | 0.1.12 | 1.0 | Obsidian ≥1.11.4 desktop/mobile | Public Community-review release (README still labels the 0.x software beta); exact public assets passed deployed pair/push/pull, Markdown/binary, immediate rename→modify, delete, outage/offline hard restart/retry, and unsaved-open-editor conflict preservation on real Linux Obsidian 1.12.7; Community acceptance and other OS/mobile matrix pending. |
+| `central-vault-sync` | 0.1.13 | 1.0 | Obsidian ≥1.11.4 desktop/mobile | Public Community-review release (README still labels the 0.x software beta). 0.1.13 changes review metadata/disclosures only; its runtime `main.js` and `styles.css` match the exact 0.1.12 bytes that passed deployed pair/push/pull, Markdown/binary, immediate rename→modify, delete, outage/offline hard restart/retry, and unsaved-open-editor conflict preservation on real Linux Obsidian 1.12.7. Community acceptance and other OS/mobile matrix pending. |
 | `web-vault-sync` | 0.1.0 | 1.0 | Node ≥20; Linux primary; macOS validation pending | Public npm package; registry-origin Linux pair/sync/status/doctor, systemd boot, reinstall, and healthy source-built sidecar verified. Registry image publication intentionally not offered. |
 | `@picassio/sync-core` | 0.1.3 | 1.0 | Platform-neutral ESM | Public npm package; durable enqueue-before-publish and flush-before-pull wake/poll ordering are regression-tested; clean registry-origin ESM import and zero-vulnerability dependency install verified. |
 

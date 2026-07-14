@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (Phase 41 complete: first-class multi-vault commit `7ab4e4a` is deployed, pushed, and verified by CI 29300068248 attempt 2 plus real migration/rendered/auth/rollback/reboot/headless acceptance)
+Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry live with automated review pending on plugin 0.1.13 metadata/disclosure release)
 
 ---
 
@@ -540,8 +540,9 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete: first-class multi-vaul
       start/retry, unsaved-editor conflict copy, exact hashes and clean durable state; Windows/macOS/Android/iOS remain unavailable.
 - [x] M36.9 CI/release: lint/typecheck/test/build/policy/secret scan; tag `x.y.z` = manifest version,
       attach `main.js`, `manifest.json`, optional `styles.css`; private alpha + public beta.
-- [ ] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
-      feedback bằng version mới; verify cài/update trực tiếp từ Community Plugins.
+- [~] M36.10 Submit initial release tại `community.obsidian.md` (Plugins → New plugin), xử lý automated/reviewer
+      feedback bằng version mới; verify cài/update trực tiếp từ Community Plugins. Entry đã live; automated review
+      đang chạy trên 0.1.13, reviewer approval + in-app install/update vẫn pending.
 
 ## Phase 37 — Linux headless CLI/daemon & sidecar — FR-13
 - [x] M37.1 Tạo `clients/headless` npm package có `bin: web-vault-sync`; filesystem adapter + shared sync-core,
@@ -638,6 +639,13 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete: first-class multi-vaul
       evidence also passes.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (Community automated review response 0.1.13): entry is live and pending automated/human review.
+  Review warned that `authorUrl` pointed to the repository and recommended release notes plus explicit disclosure for
+  vault enumeration and clipboard access. Published source/tag `ab77e27`/0.1.13 with organization-profile author URL;
+  README now explains startup enumeration and that clipboard access is explicit write-only redacted diagnostics.
+  Added release notes to 0.1.12 and published 0.1.13 as non-draft/non-prerelease/Latest with matching manifest plus
+  unchanged runtime `main.js`/`styles.css`. Node 20/22/24 CI 29307701871 and release CI 29307703754 pass; automated
+  review refresh and reviewer approval remain pending.
 - 2026-07-14 (Community submission release discovery): the directory reported no release for manifest 0.1.12
   even though tag/assets matched because GitHub still marked the release as prerelease. Promoted the existing 0.1.12
   release in place to published, non-draft, non-prerelease and Latest without changing its tag or three verified asset
