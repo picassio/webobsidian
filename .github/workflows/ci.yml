@@ -58,8 +58,11 @@ jobs:
       - name: Two-headless-client Central Sync E2E
         run: npm run test:e2e:headless
 
-      - name: Verify headless systemd unit
-        run: systemd-analyze verify clients/headless/packaging/systemd/web-vault-sync.service
+      - name: Multi-vault isolation, auth, and restart E2E
+        run: npm run test:e2e:multi-vault
+
+      - name: Verify headless systemd units
+        run: systemd-analyze verify clients/headless/packaging/systemd/web-vault-sync.service clients/headless/packaging/systemd/web-vault-sync@.service
 
   docker:
     name: Docker image builds
@@ -67,10 +70,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Verify Compose healthcheck targets IPv4 loopback
+      - name: Verify Compose healthcheck and multi-vault mount
         run: |
           test "$(docker compose config --format json | jq -r '.services.webobsidian.healthcheck.test[-1]')" = \
             "http://127.0.0.1:8787/healthz"
+          docker compose config --format json | jq -e '.services.webobsidian.volumes[] | select(.target == "/vaults")' >/dev/null
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getSettings } from './settings.js';
+import { currentVaultContext, currentVaultId } from './vault-context.js';
 
 export interface TreeNode {
   name: string;
@@ -19,14 +20,21 @@ export interface TreeNode {
  * Filled lazily during listTree(); the file watcher invalidates changed paths
  * (see invalidateStat), so steady-state tree fetches do zero extra syscalls.
  */
-const statCache = new Map<string, { m: number; c: number }>();
+const statCaches = new Map<string, Map<string, { m: number; c: number }>>();
+
+function statCache(): Map<string, { m: number; c: number }> {
+  const key = currentVaultId() ?? '__default__';
+  let cache = statCaches.get(key);
+  if (!cache) { cache = new Map(); statCaches.set(key, cache); }
+  return cache;
+}
 
 export function invalidateStat(rel: string): void {
-  statCache.delete(rel);
+  statCache().delete(rel);
 }
 
 async function fileStat(abs: string, rel: string): Promise<{ m: number; c: number }> {
-  const hit = statCache.get(rel);
+  const hit = statCache().get(rel);
   if (hit) return hit;
   let v = { m: 0, c: 0 };
   try {
@@ -34,7 +42,7 @@ async function fileStat(abs: string, rel: string): Promise<{ m: number; c: numbe
     // birthtime can be 0 on some Linux filesystems → fall back to mtime.
     v = { m: st.mtimeMs, c: st.birthtimeMs || st.mtimeMs };
   } catch { /* file vanished mid-walk — leave zeros */ }
-  statCache.set(rel, v);
+  statCache().set(rel, v);
   return v;
 }
 
@@ -45,8 +53,10 @@ const TEXT_EXTS = new Set([
 const IGNORED = new Set(['.git', 'node_modules']);
 
 export async function getVaultRoot(): Promise<string> {
-  const s = await getSettings();
-  return path.resolve(s.vault.path);
+  const context = currentVaultContext();
+  if (context) return context.root;
+  const settings = await getSettings();
+  return path.resolve(settings.vault.path);
 }
 
 /** Resolve a vault-relative path to an absolute one, refusing traversal. */

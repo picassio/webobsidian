@@ -5,6 +5,7 @@ import {
   type Device,
   type OperationResult,
 } from '@picassio/sync-core';
+import { vaultHeaders, withVaultQuery } from './vault-selection';
 
 export interface SyncHealthResponse {
   protocolVersion: string;
@@ -40,6 +41,15 @@ export interface SyncConflictResolutionResponse {
   protocolVersion: string;
   conflict: Conflict;
   result?: OperationResult;
+}
+
+export interface VaultSummary {
+  id: string;
+  name: string;
+  path: string;
+  storage: 'legacy' | 'isolated';
+  isDefault: boolean;
+  sync: { enabled: boolean; bootstrapState: 'backup-required' | 'ready' };
 }
 
 export interface TreeNode {
@@ -105,7 +115,7 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     ...rest,
     // headers MUST be merged last — spreading ...opts after a `headers` literal
     // would drop Content-Type whenever a caller passes its own headers.
-    headers: { 'Content-Type': 'application/json', ...(optHeaders ?? {}) },
+    headers: vaultHeaders({ 'Content-Type': 'application/json', ...(optHeaders ?? {}) }),
   });
   if (res.status === 401) {
     throw new ApiError('Unauthorized', 401);
@@ -125,7 +135,7 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
 }
 
 async function syncDeviceFetch(path: string, opts: RequestInit = {}): Promise<Response> {
-  const response = await fetch(`/api/sync/v1${path}`, { credentials: 'include', ...opts });
+  const response = await fetch(`/api/sync/v1${path}`, { credentials: 'include', ...opts, headers: vaultHeaders(opts.headers) });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { error?: { message?: string } | string };
     throw new ApiError(typeof payload.error === 'string' ? payload.error : (payload.error?.message ?? response.statusText), response.status);
@@ -165,6 +175,21 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
   me: () => req<{ authenticated: boolean; mustChangePassword: boolean }>('/auth/me'),
+
+  // vault registry
+  listVaults: () => req<{ defaultVaultId: string; vaults: VaultSummary[] }>('/api/vaults/'),
+  registerVault: (name: string, path: string) => req<{ vault: VaultSummary }>('/api/vaults/', {
+    method: 'POST', body: JSON.stringify({ name, path }),
+  }),
+  renameVault: (vaultId: string, name: string) => req<{ ok: true }>(`/api/vaults/${encodeURIComponent(vaultId)}`, {
+    method: 'PATCH', body: JSON.stringify({ name }),
+  }),
+  setDefaultVault: (vaultId: string) => req<{ ok: true }>(`/api/vaults/${encodeURIComponent(vaultId)}`, {
+    method: 'PATCH', body: JSON.stringify({ default: true }),
+  }),
+  unregisterVault: (vaultId: string) => req<{ ok: true; filesDeleted: false }>(`/api/vaults/${encodeURIComponent(vaultId)}`, {
+    method: 'DELETE', body: JSON.stringify({ confirm: vaultId }),
+  }),
 
   // files
   tree: () => req<TreeNode>('/api/files/'),
@@ -210,11 +235,11 @@ export const api = {
     const existingRevision = await currentFileRevision(target).catch((error) => error instanceof ApiError && error.status === 404 ? null : Promise.reject(error));
     if (existingRevision !== null) fd.append('baseRevision', String(existingRevision));
     fd.append('file', file);
-    const res = await fetch('/api/files/upload', { method: 'POST', credentials: 'include', body: fd });
+    const res = await fetch('/api/files/upload', { method: 'POST', credentials: 'include', headers: vaultHeaders(), body: fd });
     if (!res.ok) throw new ApiError((await res.json().catch(() => ({}))).error ?? 'Upload failed', res.status);
     return res.json() as Promise<{ ok: true; path: string; size: number }>;
   },
-  rawUrl: (path: string) => `/api/files/content?path=${encodeURIComponent(path)}`,
+  rawUrl: (path: string) => withVaultQuery(`/api/files/content?path=${encodeURIComponent(path)}`),
 
   // search & links
   // limit omitted → server returns every match (panel renders them incrementally)

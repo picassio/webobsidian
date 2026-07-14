@@ -18,7 +18,8 @@ Git backup/version history (incl. Git LFS), an API for AI agents, and community-
 [Quick start](#-quick-start-docker) · [Features](#-features) · [Configuration](#-configuration) · [Agent API](#-agent-api) · [Development](#-local-development) · [Architecture](#-architecture)
 
 > 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) ·
-> 🧭 Central Sync roadmap: [docs/SYNC_ROADMAP.md](docs/SYNC_ROADMAP.md)
+> 🧭 Central Sync roadmap: [docs/SYNC_ROADMAP.md](docs/SYNC_ROADMAP.md) ·
+> 🗂️ Multiple vaults: [docs/MULTI_VAULT.md](docs/MULTI_VAULT.md)
 
 </div>
 
@@ -27,7 +28,7 @@ Git backup/version history (incl. Git LFS), an API for AI agents, and community-
 ## What is this?
 
 WebObsidian is a web application that gives you an [Obsidian](https://obsidian.md)-like
-experience over a **real folder of Markdown files** living on your server. Your vault is
+experience over **real folders of Markdown files** living on your server. Each registered vault is
 100% compatible with an existing Obsidian vault (including the `.obsidian/` folder) — you
 can edit the same files from the Obsidian desktop app and from the web, side by side.
 
@@ -43,6 +44,9 @@ stack runs from a single `docker compose up`.
 
 ## ✨ Features
 
+- 🗂️ **Multiple isolated vaults** — register and switch between several vaults in one server process; each has
+  independent sync history/devices, search, Git backup, shares, plugins and workspace state. See
+  [docs/MULTI_VAULT.md](docs/MULTI_VAULT.md).
 - 📝 **Editor & rendering** — CodeMirror 6 with live / source / reading views; wikilinks
   `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, KaTeX math and
   Mermaid diagrams.
@@ -94,6 +98,7 @@ deployment settings live in **`.env`** (git-ignored) — you never edit the trac
 ```bash
 # .env
 VAULT_HOST_PATH=/abs/path/to/your/ObsidianVault   # must exist; bind-mounted to /vault
+DATA_HOST_PATH=/abs/path/to/webobsidian-data      # optional bind; otherwise a managed volume
 WEBOBSIDIAN_PASSWORD=use-a-strong-password
 HTTP_BIND=0.0.0.0                                  # 127.0.0.1 to expose only to localhost
 HTTP_PORT=8787
@@ -101,6 +106,16 @@ HTTP_PORT=8787
 
 Then `docker compose up -d --build`. Your vault can be a plain folder or a `git clone`
 (Git LFS is supported for attachments).
+
+For multiple vaults, mount their common parent and register each child path in **Settings → Vault & Files**:
+
+```bash
+# .env
+VAULTS_HOST_PATH=/abs/path/to/ObsidianVaults   # mounted at /vaults
+```
+
+Register `/vaults/Personal`, `/vaults/Work`, etc. Roots must be distinct and non-overlapping. See
+[Multiple vaults](docs/MULTI_VAULT.md).
 
 ### Behind a reverse proxy (TLS)
 
@@ -162,6 +177,8 @@ Useful scripts:
 | Var | Default | Description |
 |-----|---------|-------------|
 | `VAULT_HOST_PATH` | `./sample-vault` | Host path bind-mounted to `/vault` |
+| `VAULTS_HOST_PATH` | `./sample-vaults` | Optional host parent bind-mounted to `/vaults` for additional vaults |
+| `DATA_HOST_PATH` | managed `webobsidian-data` volume | Optional host directory bind-mounted to `/data` for settings and all vault metadata |
 | `HTTP_BIND` | `0.0.0.0` | Host interface to publish on (`127.0.0.1` = local only) |
 | `HTTP_PORT` | `8787` | Host port mapped to container `8787` |
 | `WEBOBSIDIAN_PASSWORD` | – | Seed/override the master password |

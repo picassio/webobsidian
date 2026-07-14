@@ -8,6 +8,7 @@
  * softly (their missing-API calls throw and are caught) — logged, not fatal.
  */
 import { api } from './api';
+import { getActiveVaultId, vaultHeaders, withVaultQuery } from './vault-selection';
 import { useStore } from './store';
 
 // ---- Minimal Obsidian API shim ------------------------------------------
@@ -35,7 +36,10 @@ class TFile {
 }
 
 class Vault extends Events {
-  getName() { return 'WebObsidian'; }
+  getName() {
+    const state = useStore.getState();
+    return state.vaults.find((vault) => vault.id === state.activeVaultId)?.name ?? 'WebObsidian';
+  }
   async read(file: TFile) { const r = await api.read(file.path); return typeof r === 'string' ? r : r.content; }
   async cachedRead(file: TFile) { return this.read(file); }
   async modify(file: TFile, data: string) {
@@ -122,12 +126,13 @@ const obsidianModule = {
 };
 
 const sharedApp = new App();
-const loaded = new Map<string, { instance: Plugin }>();
+const loaded = new Map<string, { instance: Plugin; style?: HTMLLinkElement }>();
 
 /** Evaluate one plugin's main.js against the shim. */
 async function loadPlugin(id: string, manifest: any) {
-  if (loaded.has(id)) return;
-  const code = await fetch(`/api/plugins/${id}/main.js`, { credentials: 'include' }).then((r) => r.text());
+  const key = `${getActiveVaultId() ?? 'default'}:${id}`;
+  if (loaded.has(key)) return;
+  const code = await fetch(`/api/plugins/${id}/main.js`, { credentials: 'include', headers: vaultHeaders() }).then((r) => r.text());
   const module = { exports: {} as any };
   const require = (name: string) => {
     if (name === 'obsidian') return obsidianModule;
@@ -139,18 +144,29 @@ async function loadPlugin(id: string, manifest: any) {
   const PluginClass = module.exports.default ?? module.exports;
   const instance: Plugin = new PluginClass(sharedApp, manifest);
   await instance.onload?.();
-  loaded.set(id, { instance });
+  let style: HTMLLinkElement | undefined;
   // inject plugin styles if any
   if (manifest.hasStyles) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `/api/plugins/${id}/styles.css`;
-    document.head.appendChild(link);
+    style = document.createElement('link');
+    style.rel = 'stylesheet';
+    style.href = withVaultQuery(`/api/plugins/${id}/styles.css`);
+    document.head.appendChild(style);
   }
+  loaded.set(key, { instance, ...(style ? { style } : {}) });
   console.log(`[plugin] loaded ${id}`);
 }
 
 /** Load all enabled community plugins. Failures are logged, not fatal. */
+export async function unloadPlugins(vaultId = getActiveVaultId() ?? 'default'): Promise<void> {
+  const prefix = `${vaultId}:`;
+  for (const [key, value] of loaded) {
+    if (!key.startsWith(prefix)) continue;
+    try { await value.instance.onunload?.(); } catch { /* plugin cleanup is best-effort */ }
+    value.style?.remove();
+    loaded.delete(key);
+  }
+}
+
 export async function loadPlugins(): Promise<void> {
   try {
     const { plugins } = await api.listPlugins();

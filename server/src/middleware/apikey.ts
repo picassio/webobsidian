@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { authenticateKey, type Scope } from '../services/apikeys.js';
 import { getSettings } from '../services/settings.js';
 import type { ApiKeyRecord } from '../services/settings.js';
+import { currentVaultId } from '../services/vault-context.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -54,9 +55,14 @@ export function requireApiKey(scope?: Scope) {
       res.status(403).json({ error: `Missing scope: ${scope}` });
       return;
     }
+    const vaultId = currentVaultId() ?? s.vaults.defaultVaultId;
+    if (record.vaultIds !== '*' && !(record.vaultIds ?? [s.vaults.defaultVaultId]).includes(vaultId)) {
+      res.status(403).json({ error: 'API key is not authorized for this vault' });
+      return;
+    }
     req.apiKey = record;
     // lightweight audit log (no secrets)
-    console.log(`[api] ${record.name} ${req.method} ${req.path}`);
+    console.log(`[api] ${record.name} vault=${vaultId} ${req.method} ${req.path}`);
     next();
   };
 }

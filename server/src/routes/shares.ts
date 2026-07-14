@@ -8,12 +8,13 @@ import { resolveFile } from '../services/fileindex.js';
 import { hashPassword, verifyPassword } from '../services/auth.js';
 import { getSettings } from '../services/settings.js';
 import {
-  listShares, createShare, setShareEnabled, setSharePassword, deleteShare, getActiveShare,
+  listShares, createShare, setShareEnabled, setSharePassword, deleteShare, getActiveShare, findActiveShareVault,
   type ShareRecord,
 } from '../services/shares.js';
 import { canvasEmbedTargets } from '../services/rendercanvas.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
+import { enterVault } from '../services/vault-context.js';
 
 const isMd = (p: string) => /\.(md|markdown)$/i.test(p);
 const isCanvas = (p: string) => /\.canvas$/i.test(p);
@@ -124,6 +125,11 @@ async function resolveVaultPath(rel: string): Promise<string | null> {
 }
 
 export const publicSharesRouter = Router();
+publicSharesRouter.use('/:id', asyncHandler(async (req, _res, next) => {
+  const found = await findActiveShareVault(req.params.id);
+  if (found) enterVault(found.context);
+  next();
+}));
 
 const UNLOCK_TTL = '12h';
 const unlockCookie = (id: string) => `wo_share_${id}`;

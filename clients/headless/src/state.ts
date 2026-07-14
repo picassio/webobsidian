@@ -142,7 +142,11 @@ export class HeadlessStore implements SyncClientPersistence {
   async putEntry(entry: SyncEntry) { await this.update((state) => { state.entries = [...state.entries.filter((item) => item.entryId !== entry.entryId), entry]; }); }
   async replaceEntries(entries: SyncEntry[]) { await this.update((state) => { state.entries = entries; }); }
   async queuePath(pending: PendingPath) { await this.update((state) => { state.pendingPaths = [...state.pendingPaths.filter((item) => item.path !== pending.path), pending]; }); }
-  async removePendingPath(filePath: string) { await this.update((state) => { state.pendingPaths = state.pendingPaths.filter((item) => item.path !== filePath); }); }
+  async removePendingPath(filePath: string, observedAt?: string) {
+    await this.update((state) => {
+      state.pendingPaths = state.pendingPaths.filter((item) => item.path !== filePath || (observedAt !== undefined && item.observedAt !== observedAt));
+    });
+  }
   mergedSource(filePath: string) { return this.state.mergedSources[filePath]; }
   async putMergedSource(filePath: string, hash: string) { await this.update((state) => { state.mergedSources[filePath] = hash; }); }
   async removeMergedSource(filePath: string) { await this.update((state) => { delete state.mergedSources[filePath]; }); }

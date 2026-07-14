@@ -32,4 +32,3 @@ export const config: RuntimeConfig = {
 };
 
 export const SETTINGS_FILE = path.join(config.dataDir, 'settings.json');
-export const INDEX_FILE = path.join(config.dataDir, 'qmd-index.json');

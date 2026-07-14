@@ -14,7 +14,8 @@ These files implement the contract in [`../SYNC_ROADMAP.md`](../SYNC_ROADMAP.md)
   and explicit capacity stop conditions.
 - [`COMPATIBILITY.md`](COMPATIBILITY.md) — rolling upgrade matrix/policy, rollback, mobile limits, privacy,
   troubleshooting, and support/security channels.
-- [`ACCEPTANCE_EVIDENCE.md`](ACCEPTANCE_EVIDENCE.md) — explicit PRD DoD 8–14 and phase 31–40 evidence map,
+- [`../MULTI_VAULT.md`](../MULTI_VAULT.md) — vault registry, isolation, API selection, migration and systemd profiles.
+- [`ACCEPTANCE_EVIDENCE.md`](ACCEPTANCE_EVIDENCE.md) — explicit PRD DoD 8–14 and phase 31–41 evidence map,
   remaining external blockers, and the stable completion rule.
 
 Current consumers:
@@ -24,8 +25,8 @@ Current consumers:
   one-time rotated server-side before deletion).
 - Native plugin pre-release: [picassio/central-vault-sync](https://github.com/picassio/central-vault-sync)
   (Vault API + `requestUrl` + SecretStorage; source public, Community Plugins review pending).
-- Headless adapter: implemented as the unreleased `web-vault-sync` package under `clients/headless/`;
-  publication remains tracked by Phase 37/40 in `IMPLEMENTATION_PLAN.md`.
+- Headless adapter: public `web-vault-sync@0.1.0` under `clients/headless/`; a source patch serializes watcher
+  drains and adds multi-vault systemd profile units, but that patch is not yet published.
 
 Regenerate and verify:
 

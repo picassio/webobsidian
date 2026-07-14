@@ -29,6 +29,10 @@ settingsRouter.put(
       return res.status(409).json({ error: 'Legacy bidirectional Git is mutually exclusive with Central Sync' });
     }
     if (body.vault && typeof body.vault.path === 'string' && body.vault.path) {
+      const currentPath = path.resolve((await getSettings()).vault.path);
+      if (path.resolve(body.vault.path) !== currentPath) {
+        return res.status(409).json({ error: 'Register a new vault instead of changing the path of a live vault runtime' });
+      }
       await assertVaultPathAllowed(body.vault);
     }
     const updated = await updateSettings((d) => {

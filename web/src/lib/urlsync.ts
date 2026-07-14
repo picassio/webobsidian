@@ -1,20 +1,30 @@
 // Deep-link URL sync (FR-10): the browser URL mirrors the open note as
-// /note/<vault-relative-path> (Graph view = /graph). Opening such a URL after
+// /vault/<vaultId>/note/<vault-relative-path> (Graph view = /vault/<vaultId>/graph). Legacy /note and /graph use the default vault. Opening such a URL after
 // login opens the note; browser back/forward navigate via popstate.
 import { useStore, GRAPH_PATH } from './store';
+import { getActiveVaultId } from './vault-selection';
 
 export function pathToUrl(path: string | null): string {
-  if (!path) return '/';
-  if (path === GRAPH_PATH) return '/graph';
-  return `/note/${path.split('/').map(encodeURIComponent).join('/')}`;
+  const vaultId = getActiveVaultId();
+  const prefix = vaultId ? `/vault/${encodeURIComponent(vaultId)}` : '';
+  if (!path) return prefix || '/';
+  if (path === GRAPH_PATH) return `${prefix}/graph`;
+  return `${prefix}/note/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export function urlToVaultId(pathname: string): string | null {
+  const match = pathname.match(/^\/vault\/([^/]+)(?:\/|$)/);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]); } catch { return null; }
 }
 
 /** Vault path encoded in a location pathname, or null if it isn't a deep link. */
 export function urlToPath(pathname: string): string | null {
-  if (pathname === '/graph') return GRAPH_PATH;
-  if (pathname.startsWith('/note/')) {
+  const scoped = pathname.match(/^\/vault\/[^/]+(\/.*)?$/)?.[1] ?? pathname;
+  if (scoped === '/graph') return GRAPH_PATH;
+  if (scoped.startsWith('/note/')) {
     try {
-      const rel = pathname.slice('/note/'.length).split('/').map(decodeURIComponent).join('/');
+      const rel = scoped.slice('/note/'.length).split('/').map(decodeURIComponent).join('/');
       return rel || null;
     } catch {
       return null;
@@ -40,7 +50,7 @@ export function initUrlSync(): string | null {
   // entry instead of pushing, so Back doesn't land on a stale '/'.
   let firstSync = true;
   useStore.subscribe((state, prev) => {
-    if (state.activePath === prev.activePath) return;
+    if (state.activePath === prev.activePath && state.activeVaultId === prev.activeVaultId) return;
     const url = pathToUrl(state.activePath);
     if (window.location.pathname === url) return;
     if (applyingPop || firstSync) window.history.replaceState(null, '', url);
@@ -51,13 +61,15 @@ export function initUrlSync(): string | null {
   // URL → store (browser back/forward)
   window.addEventListener('popstate', () => {
     const path = urlToPath(window.location.pathname);
-    if (!path || path === useStore.getState().activePath) return;
+    const state = useStore.getState();
+    const legacyDeepLink = window.location.pathname === '/graph' || window.location.pathname.startsWith('/note/');
+    const vaultId = urlToVaultId(window.location.pathname) ?? (legacyDeepLink ? state.defaultVaultId : null);
+    if (!path && !vaultId) return;
     applyingPop = true;
-    Promise.resolve(useStore.getState().openFile(path))
+    Promise.resolve(vaultId && vaultId !== state.activeVaultId ? state.switchVault(vaultId) : undefined)
+      .then(() => path && path !== useStore.getState().activePath ? useStore.getState().openFile(path) : undefined)
       .catch(() => {})
-      .finally(() => {
-        applyingPop = false;
-      });
+      .finally(() => { applyingPop = false; });
   });
 
   return initial;

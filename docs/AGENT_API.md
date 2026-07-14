@@ -9,7 +9,9 @@ X-API-Key: wok_xxx
 ```
 
 Scopes: `read`, `write`, `search`. Rate limit: configurable (default 120 req/min/key).
-All `{path}` values are vault-relative (URL-encode slashes are fine, e.g. `Notes/Ideas.md`).
+Keys are also bound to one or more vault IDs. Select an authorized vault with
+`X-WebObsidian-Vault-Id: vault_...`; omitting it selects the server default vault. A key receives 403 rather
+than falling through to another vault when it lacks that vault grant. All `{path}` values are vault-relative (URL-encode slashes are fine, e.g. `Notes/Ideas.md`).
 
 ## Endpoints
 
@@ -37,10 +39,12 @@ Creating a path that does not exist omits `baseRevision`.
 
 ```bash
 KEY=wok_your_key_here
+VAULT=vault_your_vault_id
 BASE=http://localhost:8787/api/v1
+AUTH=(-H "X-API-Key: $KEY" -H "X-WebObsidian-Vault-Id: $VAULT")
 
 # list notes
-curl -H "X-API-Key: $KEY" "$BASE/notes?limit=10"
+curl "${AUTH[@]}" "$BASE/notes?limit=10"
 
 # read a note
 curl -H "X-API-Key: $KEY" "$BASE/notes/Welcome.md"

@@ -12,7 +12,7 @@ import chokidar from 'chokidar';
 
 import { config } from './config.js';
 import { loadSettings, getSettings, setPasswordIfInitial } from './bootstrap.js';
-import { errorHandler } from './middleware/error.js';
+import { asyncHandler, errorHandler } from './middleware/error.js';
 import { COOKIE_NAME } from './middleware/auth.js';
 import { verifyToken } from './services/auth.js';
 import { authRouter } from './routes/auth.js';
@@ -25,21 +25,28 @@ import { pluginsRouter } from './routes/plugins.js';
 import { agentRouter } from './routes/agent.js';
 import { uiStateRouter } from './routes/uistate.js';
 import { syncRouter } from './routes/sync.js';
+import { vaultsRouter } from './routes/vaults.js';
 import { sharesRouter, publicSharesRouter } from './routes/shares.js';
 import { sharePageRouter } from './routes/sharepage.js';
 import { initSearch, qmd } from './services/search.js';
 import { buildLinkGraph, updateLinkGraphForFile } from './services/links.js';
 import { buildFileIndex, indexFile, unindexFile } from './services/fileindex.js';
 import { setBroadcaster, broadcast } from './services/realtime.js';
-import { getVaultRoot, ensureVault, invalidateStat } from './services/vault.js';
-import { startAutoSync } from './services/autosync.js';
+import { invalidateStat } from './services/vault.js';
+import { startAutoSync, stopAutoSync } from './services/autosync.js';
 import { scheduleAutoCommitOnSave } from './services/git.js';
 import { onFileRenamed } from './services/shares.js';
-import { getSyncCoordinator, getSyncDeviceStore, initializeSyncRuntime, shutdownSyncRuntime } from './services/sync-runtime.js';
-import { registerSyncWebSocketDisconnect } from './sync/ws-registry.js';
+import {
+  addSyncRuntime, beginSyncRuntimeDrain, cancelSyncRuntimeDrain, getSyncCoordinator, getSyncRuntime,
+  initializeSyncRuntimes, leaseSyncRuntime, listSyncRuntimes, removeSyncRuntime, shutdownSyncRuntime,
+  waitForSyncRuntimeDrain,
+} from './services/sync-runtime.js';
+import { disconnectSyncWebSockets, registerSyncWebSocketDisconnect } from './sync/ws-registry.js';
 import { sha256Chunks, type SyncEvent } from '@picassio/sync-core';
-import { VaultStateStore } from './sync/vault-state.js';
 import { wsTickets } from './sync/ws-tickets.js';
+import { registerVaultLifecycleHandlers, selectedVaultMiddleware, validateRegisteredVaultRoots, vaultContext } from './services/vault-registry.js';
+import { getPersistedSettings } from './services/settings.js';
+import { runInVault, type VaultContext } from './services/vault-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,17 +62,64 @@ process.on('unhandledRejection', (reason) => {
 async function main() {
   await loadSettings();
   await setPasswordIfInitial();
-  await ensureVault();
-  const vaultRoot = await getVaultRoot();
-  const syncCoordinator = await initializeSyncRuntime(vaultRoot, config.dataDir);
-  if (syncCoordinator.health().readOnly) {
-    console.error(`[sync] read-only degraded mode: ${syncCoordinator.health().reason}`);
+  const persistedSettings = await getPersistedSettings();
+  for (const record of persistedSettings.vaults.items) await fs.mkdir(record.path, { recursive: true });
+  await validateRegisteredVaultRoots(persistedSettings.vaults.items);
+  const syncRuntimes = await initializeSyncRuntimes(persistedSettings.vaults.items, persistedSettings.vaults.defaultVaultId);
+  registerVaultLifecycleHandlers({
+    registered: async (record) => {
+      const settings = await getPersistedSettings();
+      const runtime = await addSyncRuntime(record, settings.vaults.defaultVaultId);
+      try { await initializeVaultServices(runtime); }
+      catch (error) {
+        beginSyncRuntimeDrain(record.id);
+        stopAutoSync(record.id);
+        await stopWatcher(record.id);
+        await removeSyncRuntime(record.id);
+        throw error;
+      }
+    },
+    unregistering: async (record) => {
+      const runtime = getSyncRuntime(record.id);
+      beginSyncRuntimeDrain(record.id);
+      try {
+        for (const device of await runtime.devices.list()) disconnectSyncWebSockets(device.deviceId, record.id);
+        await waitForSyncRuntimeDrain(record.id);
+        for (const device of await runtime.devices.list()) disconnectSyncWebSockets(device.deviceId, record.id);
+        stopAutoSync(record.id);
+        await stopWatcher(record.id);
+        await removeSyncRuntime(record.id);
+      } catch (error) {
+        cancelSyncRuntimeDrain(record.id);
+        if (!vaultWatchers.has(record.id)) await setupWatcher(runtime.context).catch(() => {});
+        startAutoSync(runtime.context);
+        throw error;
+      }
+    },
+  });
+  for (const runtime of syncRuntimes) {
+    if (runtime.coordinator.health().readOnly) {
+      console.error(`[sync] vault=${runtime.context.vaultId} read-only degraded mode: ${runtime.coordinator.health().reason}`);
+    }
   }
 
   const app = express();
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '32mb' }));
   app.use(cookieParser());
+  // Select a vault context for every request. Missing selector intentionally
+  // resolves to the default vault so pre-v4 clients remain compatible.
+  app.use(selectedVaultMiddleware);
+  app.use((_req, res, next) => {
+    let runtime: ReturnType<typeof getSyncRuntime>;
+    try { runtime = getSyncRuntime(); }
+    catch (error) { next(error); return; }
+    const release = leaseSyncRuntime(runtime);
+    if (!release) { next(Object.assign(new Error('Selected vault is draining'), { status: 503 })); return; }
+    res.once('finish', release);
+    res.once('close', release);
+    next();
+  });
 
   // Per-request CSP nonce — used by the SSR share page's inline <script>.
   app.use((_req, res, next) => {
@@ -107,16 +161,20 @@ async function main() {
   }
 
   // Health (no auth) — for docker healthcheck
-  app.get('/healthz', (_req, res) => {
-    const sync = syncCoordinator.health();
-    res.status(sync.readOnly ? 503 : 200).json({ ok: !sync.readOnly, sync });
-  });
+  app.get('/healthz', asyncHandler(async (_req, res) => {
+    const vaults = listSyncRuntimes().map((runtime) => ({ vaultId: runtime.context.vaultId, ...runtime.coordinator.health() }));
+    const unhealthy = vaults.some((runtime) => runtime.readOnly);
+    const current = await getPersistedSettings();
+    const sync = getSyncRuntime(current.vaults.defaultVaultId).coordinator.health();
+    res.status(unhealthy ? 503 : 200).json({ ok: !unhealthy, sync, vaults });
+  }));
 
   // Routes. NOTE: specific /api/* routers must be registered BEFORE the broad
   // '/api' search router, whose router-level requireAuth middleware would
   // otherwise gate every /api/* path (incl. /api/v1 and /api/keys) by prefix.
   app.use('/auth', authRouter);
   app.use('/api/v1', agentRouter); // agent API (api-key auth)
+  app.use('/api/vaults', vaultsRouter);
   app.use('/api/sync/v1', syncRouter);
   app.use('/api/files', filesRouter);
   app.use('/api/settings', settingsRouter);
@@ -141,36 +199,39 @@ async function main() {
 
   app.use(errorHandler);
 
-  // Build search index + link graph
-  console.log('[boot] indexing vault...');
-  await initSearch();
-  await buildLinkGraph();
-  await buildFileIndex();
-  setupSyncSubscribers(syncCoordinator);
-  console.log('[boot] index ready');
+  // Build independent projections/watchers for every registered vault.
+  for (const runtime of syncRuntimes) await initializeVaultServices(runtime);
+  console.log('[boot] all vault indexes ready');
 
   const server = http.createServer(app);
-  const syncVaultId = (await new VaultStateStore(config.dataDir).loadOrCreate()).vaultId;
-  setupWebsocket(server, syncVaultId);
-  await setupWatcher();
-  startAutoSync();
+  setupWebsocket(server);
 
   server.listen(config.port, config.host, () => {
     console.log(`\n  WebObsidian server → http://${config.host}:${config.port}`);
-    console.log(`  Vault: ${config.defaultVaultPath}`);
-    console.log(`  Data:  ${config.dataDir}\n`);
+    console.log(`  Vaults: ${persistedSettings.vaults.items.length}`);
+    console.log(`  Data:   ${config.dataDir}\n`);
   });
   let stopping = false;
   const stop = (signal: string) => {
     if (stopping) return;
     stopping = true;
     console.log(`[shutdown] ${signal}: draining HTTP and checkpointing sync projection`);
-    const checkpoint = shutdownSyncRuntime();
-    server.close(() => {
-      void checkpoint.then(() => process.exit(0), (error) => {
-        console.error('[shutdown] sync checkpoint failed:', error instanceof Error ? error.message : String(error));
-        process.exit(1);
+    const runtimes = listSyncRuntimes();
+    for (const runtime of runtimes) beginSyncRuntimeDrain(runtime.context.vaultId);
+    server.close();
+    // Refuse new leases, wait for accepted HTTP work, stop filesystem/Git
+    // producers, then checkpoint. WebSocket wake connections cannot block exit.
+    const checkpoint = Promise.all(runtimes.map((runtime) => waitForSyncRuntimeDrain(runtime.context.vaultId)))
+      .then(async () => {
+        await Promise.all(runtimes.map(async (runtime) => {
+          stopAutoSync(runtime.context.vaultId);
+          await stopWatcher(runtime.context.vaultId);
+        }));
+        await shutdownSyncRuntime();
       });
+    void checkpoint.then(() => process.exit(0), (error) => {
+      console.error('[shutdown] sync checkpoint failed:', error instanceof Error ? error.message : String(error));
+      process.exit(1);
     });
     setTimeout(() => process.exit(1), 30_000).unref();
   };
@@ -178,8 +239,20 @@ async function main() {
   process.once('SIGINT', () => stop('SIGINT'));
 }
 
-function setupSyncSubscribers(coordinator: Awaited<ReturnType<typeof initializeSyncRuntime>>) {
-  coordinator.subscribe(async (event: SyncEvent) => {
+async function initializeVaultServices(runtime: ReturnType<typeof getSyncRuntime>): Promise<void> {
+  await runInVault(runtime.context, async () => {
+    console.log(`[boot] indexing vault ${runtime.context.vaultId}...`);
+    await initSearch();
+    await buildLinkGraph();
+    await buildFileIndex();
+    setupSyncSubscribers(runtime.coordinator, runtime.context);
+    await setupWatcher(runtime.context);
+    startAutoSync(runtime.context);
+  });
+}
+
+function setupSyncSubscribers(coordinator: ReturnType<typeof getSyncCoordinator>, context: VaultContext) {
+  coordinator.subscribe((event: SyncEvent) => runInVault(context, async () => {
     const removed = event.operation === 'delete' || event.operation === 'rmdir';
     const oldPath = event.oldPath;
     invalidateStat(event.path);
@@ -203,20 +276,24 @@ function setupSyncSubscribers(coordinator: Awaited<ReturnType<typeof initializeS
     scheduleAutoCommitOnSave();
     broadcast({ type: 'syncChanged', latestSequence: event.sequence });
     broadcast({ type: 'fs', event: event.operation, path: event.path });
-  });
+  }));
 }
 
 // --- WebSocket: broadcast filesystem & UI-state events to connected clients ----
 // Auth-gated: the WS stream leaks vault structure (paths of created/changed/deleted
 // files), so the upgrade is rejected unless the request carries a valid session.
-function setupWebsocket(server: http.Server, vaultId: string) {
+function setupWebsocket(server: http.Server) {
   const wss = new WebSocketServer({ noServer: true });
   const syncClients = new WeakSet<object>();
+  const clientVaults = new WeakMap<object, string>();
   const syncClientsByDevice = new Map<string, Set<import('ws').WebSocket>>();
   const alive = new WeakMap<object, boolean>();
-  registerSyncWebSocketDisconnect((deviceId) => {
-    for (const client of syncClientsByDevice.get(deviceId) ?? []) client.terminate();
-    syncClientsByDevice.delete(deviceId);
+  registerSyncWebSocketDisconnect((deviceId, vaultId) => {
+    for (const [key, clients] of syncClientsByDevice) {
+      if (!key.endsWith(`:${deviceId}`) || (vaultId && !key.startsWith(`${vaultId}:`))) continue;
+      for (const client of clients) client.terminate();
+      syncClientsByDevice.delete(key);
+    }
   });
 
   server.on('upgrade', (req, socket, head) => {
@@ -235,21 +312,34 @@ function setupWebsocket(server: http.Server, vaultId: string) {
         return;
       }
       const ticket = new URL(req.url ?? '', 'http://localhost').searchParams.get('ticket') ?? '';
-      const deviceId = wsTickets.consume(ticket);
-      if (!deviceId) {
+      const consumed = wsTickets.consumeDetailed(ticket);
+      if (!consumed) {
         socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
         socket.destroy();
         return;
       }
       void (async () => {
-        const active = (await getSyncDeviceStore().list()).some((device) => device.deviceId === deviceId && !device.revokedAt);
-        if (!active) {
+        let runtime: ReturnType<typeof getSyncRuntime>;
+        try { runtime = getSyncRuntime(consumed.vaultId); }
+        catch {
           socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
+        }
+        const release = leaseSyncRuntime(runtime);
+        if (!release) {
+          socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
+        }
+        socket.once('close', release);
+        const active = (await runtime.devices.list()).some((device) => device.deviceId === consumed.deviceId && !device.revokedAt);
+        if (!active) {
+          release(); socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
         }
         wss.handleUpgrade(req, socket, head, (ws) => {
           syncClients.add(ws);
-          const clients = syncClientsByDevice.get(deviceId) ?? new Set(); clients.add(ws); syncClientsByDevice.set(deviceId, clients);
-          ws.on('close', () => { clients.delete(ws); if (!clients.size) syncClientsByDevice.delete(deviceId); });
+          release();
+          clientVaults.set(ws, consumed.vaultId);
+          const key = `${consumed.vaultId}:${consumed.deviceId}`;
+          const clients = syncClientsByDevice.get(key) ?? new Set(); clients.add(ws); syncClientsByDevice.set(key, clients);
+          ws.on('close', () => { clients.delete(ws); if (!clients.size) syncClientsByDevice.delete(key); });
           wss.emit('connection', ws, req);
         });
       })();
@@ -260,13 +350,22 @@ function setupWebsocket(server: http.Server, vaultId: string) {
       return;
     }
     const token = cookieValue(req.headers.cookie, COOKIE_NAME) ?? bearerToken(req.headers.authorization);
+    const requestedVaultId = new URL(req.url ?? '', 'http://localhost').searchParams.get('vaultId') ?? undefined;
     void (async () => {
       if (!token || !(await verifyToken(token))) {
         socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
         socket.destroy();
         return;
       }
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+      let context: VaultContext;
+      try { context = await vaultContext(requestedVaultId); }
+      catch {
+        socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        clientVaults.set(ws, context.vaultId);
+        wss.emit('connection', ws, req);
+      });
     })();
   });
 
@@ -287,10 +386,11 @@ function setupWebsocket(server: http.Server, vaultId: string) {
   }, 30_000);
   heartbeat.unref();
   server.on('close', () => clearInterval(heartbeat));
-  setBroadcaster((msg) => {
+  setBroadcaster((msg, vaultId) => {
+    if (!vaultId) return;
     const data = JSON.stringify(msg);
     for (const client of wss.clients) {
-      if (client.readyState !== 1) continue;
+      if (client.readyState !== 1 || clientVaults.get(client) !== vaultId) continue;
       if (client.bufferedAmount > 1024 * 1024) {
         client.terminate();
         continue;
@@ -321,15 +421,17 @@ function bearerToken(header: string | undefined): string | undefined {
 }
 
 // --- chokidar watcher: reflect external changes (git pull, direct edits) ---
-async function setupWatcher() {
-  const root = await getVaultRoot();
+const vaultWatchers = new Map<string, { close: () => Promise<void>; driftTimer: NodeJS.Timeout }>();
+
+async function setupWatcher(context: VaultContext) {
+  const root = context.root;
   // WEBOBSIDIAN_WATCH: 'auto' (default) = native inotify with automatic polling
   // fallback when the host watch limit is exceeded; 'polling' = force polling.
   const forcePolling = (process.env.WEBOBSIDIAN_WATCH ?? 'auto').toLowerCase() === 'polling';
-  startWatcher(root, forcePolling);
+  startWatcher(root, forcePolling, context);
 }
 
-function startWatcher(root: string, usePolling: boolean) {
+function startWatcher(root: string, usePolling: boolean, context: VaultContext) {
   const watcher = chokidar.watch(root, {
     // Ignore VCS/dep/trash dirs AND `.obsidian` — the desktop Obsidian app
     // rewrites its workspace/state files constantly, which otherwise floods the
@@ -358,8 +460,11 @@ function startWatcher(root: string, usePolling: boolean) {
         `for this vault). Falling back to polling. For lower CPU, raise the limit: ` +
         `sudo sysctl -w fs.inotify.max_user_watches=524288`,
       );
+      const prior = vaultWatchers.get(context.vaultId);
+      if (prior) clearInterval(prior.driftTimer);
+      vaultWatchers.delete(context.vaultId);
       watcher.close().catch(() => {});
-      startWatcher(root, true);
+      startWatcher(root, true, context);
       return;
     }
     console.error('[watcher] error:', err);
@@ -409,22 +514,31 @@ function startWatcher(root: string, usePolling: boolean) {
     await reconcile(rel, type);
   };
   watcher
-    .on('add', (p, stats) => onChange(p, 'add', stats))
-    .on('change', (p, stats) => onChange(p, 'change', stats))
-    .on('unlink', (p) => onChange(p, 'unlink'))
-    .on('addDir', (p, stats) => onChange(p, 'addDir', stats))
-    .on('unlinkDir', (p) => onChange(p, 'unlinkDir'));
+    .on('add', (p, stats) => runInVault(context, () => onChange(p, 'add', stats)))
+    .on('change', (p, stats) => runInVault(context, () => onChange(p, 'change', stats)))
+    .on('unlink', (p) => runInVault(context, () => onChange(p, 'unlink')))
+    .on('addDir', (p, stats) => runInVault(context, () => onChange(p, 'addDir', stats)))
+    .on('unlinkDir', (p) => runInVault(context, () => onChange(p, 'unlinkDir')));
 
   let driftScanRunning = false;
   const driftInterval = Math.max(10_000, Number(process.env.SYNC_DRIFT_SCAN_MS ?? 60_000));
   const driftTimer = setInterval(() => {
     if (driftScanRunning) return;
     driftScanRunning = true;
-    void getSyncCoordinator().reconcileExternalDrift()
-      .catch((error) => console.error('[watcher] periodic drift scan failed:', error))
+    void runInVault(context, () => getSyncCoordinator().reconcileExternalDrift())
+      .catch((error) => console.error(`[watcher] vault=${context.vaultId} periodic drift scan failed:`, error))
       .finally(() => { driftScanRunning = false; });
   }, driftInterval);
   driftTimer.unref();
+  vaultWatchers.set(context.vaultId, { close: () => watcher.close(), driftTimer });
+}
+
+async function stopWatcher(vaultId: string): Promise<void> {
+  const state = vaultWatchers.get(vaultId);
+  if (!state) return;
+  clearInterval(state.driftTimer);
+  vaultWatchers.delete(vaultId);
+  await state.close();
 }
 
 async function dirExists(p: string): Promise<boolean> {

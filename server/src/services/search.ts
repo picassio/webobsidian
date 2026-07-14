@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import MiniSearch from 'minisearch';
 import { getSettings } from './settings.js';
-import { INDEX_FILE, config } from '../config.js';
+import { config } from '../config.js';
+import { currentVaultContext, currentVaultId } from './vault-context.js';
 import { listMarkdownFiles, readFileText } from './vault.js';
 import { parseNote } from './markdown.js';
 
@@ -311,14 +313,15 @@ class QmdEngine {
 
   private async persist(): Promise<void> {
     try {
-      await fs.mkdir(config.dataDir, { recursive: true });
+      const dataDir = currentVaultContext()?.dataDir ?? config.dataDir;
+      await fs.mkdir(dataDir, { recursive: true });
       const payload = {
         mini: this.mini.toJSON(),
         snippets: [...this.snippets.entries()],
         tags: [...this.tagSet.entries()],
         propMeta: [...this.propMeta.entries()],
       };
-      await fs.writeFile(INDEX_FILE, JSON.stringify(payload));
+      await fs.writeFile(path.join(dataDir, 'qmd-index.json'), JSON.stringify(payload));
     } catch {
       /* non-fatal */
     }
@@ -326,7 +329,8 @@ class QmdEngine {
 
   async restore(): Promise<boolean> {
     try {
-      const raw = await fs.readFile(INDEX_FILE, 'utf8');
+      const dataDir = currentVaultContext()?.dataDir ?? config.dataDir;
+      const raw = await fs.readFile(path.join(dataDir, 'qmd-index.json'), 'utf8');
       const payload = JSON.parse(raw);
       this.mini = MiniSearch.loadJSON<QmdDoc>(JSON.stringify(payload.mini), {
         fields: FIELDS as unknown as string[],
@@ -376,10 +380,26 @@ function parseFielded(query: string): { filterText: string; fields: string[] } {
   return { filterText: rest.join(' '), fields: [...fields] };
 }
 
-export const qmd = new QmdEngine();
+const engines = new Map<string, QmdEngine>();
 
-/** Initialize the engine: restore from disk or build fresh. */
+function currentEngine(): QmdEngine {
+  const key = currentVaultId() ?? '__default__';
+  let engine = engines.get(key);
+  if (!engine) { engine = new QmdEngine(); engines.set(key, engine); }
+  return engine;
+}
+
+/** Contextual compatibility proxy: callers keep using qmd.*, but state is per vault. */
+export const qmd = new Proxy({} as QmdEngine, {
+  get(_target, property) {
+    const value = Reflect.get(currentEngine(), property);
+    return typeof value === 'function' ? value.bind(currentEngine()) : value;
+  },
+});
+
+/** Initialize the selected vault engine: restore from disk or build fresh. */
 export async function initSearch(): Promise<void> {
-  const restored = await qmd.restore();
-  if (!restored) await qmd.build();
+  const engine = currentEngine();
+  const restored = await engine.restore();
+  if (!restored) await engine.build();
 }

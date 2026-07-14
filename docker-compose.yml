@@ -15,14 +15,18 @@ services:
       WEBOBSIDIAN_WATCH: ${WEBOBSIDIAN_WATCH:-auto}
       VAULT_PATH: /vault
       DATA_DIR: /data
-      ALLOWED_ROOTS: /vault
+      # /vault preserves the legacy default; /vaults is the optional parent for additional vaults.
+      ALLOWED_ROOTS: /vault,/vaults
       NODE_ENV: production
     volumes:
       # Your vault on the host (VAULT_HOST_PATH in .env) → /vault in the container.
       # Defaults to the bundled sample vault so `docker compose up` works immediately.
       - ${VAULT_HOST_PATH:-./sample-vault}:/vault
-      # Persisted settings.json + search index
-      - webobsidian-data:/data
+      # Optional common parent for first-class multi-vault registration.
+      - ${VAULTS_HOST_PATH:-./sample-vaults}:/vaults
+      # Persisted settings.json + per-vault sync/search/share/workspace state.
+      # Set DATA_HOST_PATH to an absolute host directory for backup-visible bind storage.
+      - ${DATA_HOST_PATH:-webobsidian-data}:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/healthz"]
       interval: 30s

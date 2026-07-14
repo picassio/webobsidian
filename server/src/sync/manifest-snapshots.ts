@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { SyncEntry } from '@picassio/sync-core';
 
-interface Snapshot { snapshotId: string; sequence: number; entries: SyncEntry[]; expiresAt: number }
+interface Snapshot { snapshotId: string; vaultId: string; sequence: number; entries: SyncEntry[]; expiresAt: number }
 interface Cursor { snapshotId: string; offset: number }
 
 export class ManifestExpiredError extends Error {
@@ -14,27 +14,27 @@ export class ManifestSnapshotStore {
   private readonly cursors = new Map<string, Cursor>();
   constructor(private readonly ttlMs = 15 * 60 * 1000) {}
 
-  create(entries: SyncEntry[], sequence: number, limit: number) {
+  create(entries: SyncEntry[], sequence: number, limit: number, vaultId = '') {
     this.prune();
     const snapshotId = `snapshot_${randomBytes(18).toString('base64url')}`;
     this.snapshots.set(snapshotId, {
-      snapshotId, sequence,
+      snapshotId, vaultId, sequence,
       entries: entries.map((entry) => ({ ...entry })),
       expiresAt: Date.now() + this.ttlMs,
     });
-    return this.pageSnapshot(snapshotId, 0, limit);
+    return this.pageSnapshot(snapshotId, 0, limit, vaultId);
   }
 
-  page(cursor: string, limit: number) {
+  page(cursor: string, limit: number, vaultId = '') {
     this.prune();
     const position = this.cursors.get(cursor);
     if (!position) throw new ManifestExpiredError();
-    return this.pageSnapshot(position.snapshotId, position.offset, limit);
+    return this.pageSnapshot(position.snapshotId, position.offset, limit, vaultId);
   }
 
-  private pageSnapshot(snapshotId: string, offset: number, limit: number) {
+  private pageSnapshot(snapshotId: string, offset: number, limit: number, vaultId: string) {
     const snapshot = this.snapshots.get(snapshotId);
-    if (!snapshot || snapshot.expiresAt <= Date.now()) throw new ManifestExpiredError();
+    if (!snapshot || snapshot.vaultId !== vaultId || snapshot.expiresAt <= Date.now()) throw new ManifestExpiredError();
     const entries = snapshot.entries.slice(offset, offset + limit);
     const nextOffset = offset + entries.length;
     let nextCursor: string | null = null;

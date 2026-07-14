@@ -6,6 +6,7 @@ import { HeadlessStore, type PendingPath } from './state.js';
 import { NodeSyncTransport } from './transport.js';
 
 export class FilesystemMutationQueue {
+  private flushLane: Promise<void> = Promise.resolve();
   constructor(
     private readonly store: HeadlessStore,
     private readonly adapter: FilesystemAdapter,
@@ -29,9 +30,13 @@ export class FilesystemMutationQueue {
       if (!entry.deleted && !seen.has(entry.path)) await this.observe({ path: entry.path, action: 'delete', observedAt: new Date().toISOString() });
     }
   }
-  async flushAll(): Promise<void> {
-    if (this.store.state.mode === 'pull-only') return;
-    for (const pending of [...this.store.state.pendingPaths]) await this.flush(pending);
+  flushAll(): Promise<void> {
+    const run = this.flushLane.then(async () => {
+      if (this.store.state.mode === 'pull-only') return;
+      for (const pending of [...this.store.state.pendingPaths]) await this.flush(pending);
+    });
+    this.flushLane = run.catch(() => {});
+    return run;
   }
   private async flush(pending: PendingPath): Promise<void> {
     assertServerPathAllowed(pending.path);
@@ -47,7 +52,7 @@ export class FilesystemMutationQueue {
       const absolute = path.join(this.store.state.vaultPath, ...pending.path.split('/'));
       let stat;
       try { stat = await fs.lstat(absolute); } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') { await this.store.removePendingPath(pending.path); return; }
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') { await this.store.removePendingPath(pending.path, pending.observedAt); return; }
         throw error;
       }
       if (stat.isSymbolicLink()) throw new Error(`symlink is not allowed: ${pending.path}`);
@@ -57,7 +62,7 @@ export class FilesystemMutationQueue {
       } else if (stat.isFile()) {
         const content = await this.adapter.hash(pending.path);
         if (await this.adapter.consumeExpected(pending.path, content.hash) || entry?.hash === content.hash) {
-          await this.store.removePendingPath(pending.path); return;
+          await this.store.removePendingPath(pending.path, pending.observedAt); return;
         }
         const reference = content.size === 0 ? { hash: content.hash, size: 0, inlineText: '' } : { hash: content.hash, size: content.size, blobHash: content.hash };
         if (content.size > 0) await this.transport.uploadFile(absolute, content.hash, content.size);
@@ -67,7 +72,7 @@ export class FilesystemMutationQueue {
       }
     }
     if (operation) await this.engine.queue(operation);
-    await this.store.removePendingPath(pending.path);
+    await this.store.removePendingPath(pending.path, pending.observedAt);
   }
 }
 function randomId() { return Buffer.from(crypto.getRandomValues(new Uint8Array(12))).toString('hex'); }

@@ -28,7 +28,10 @@ export default function Sidebar() {
   const autoReveal = useStore((s) => s.autoReveal);
   const toggleAutoReveal = useStore((s) => s.toggleAutoReveal);
   const openContextMenu = useStore((s) => s.openContextMenu);
-  const vaultName = tree?.name || 'Vault';
+  const vaults = useStore((s) => s.vaults);
+  const activeVaultId = useStore((s) => s.activeVaultId);
+  const switchVault = useStore((s) => s.switchVault);
+  const vaultName = vaults.find((vault) => vault.id === activeVaultId)?.name ?? tree?.name ?? 'Vault';
 
   const allCollapsed = expanded.length === 0;
   const toggleCollapseAll = () => setExpanded(allCollapsed ? collectFolderPaths(tree) : []);
@@ -130,9 +133,17 @@ export default function Sidebar() {
         {leftPanel === 'bookmarks' && <BookmarksPanel />}
       </div>
       <div className="vault-footer">
-        <span className="vault-name">
-          <Icon name="gem" size={15} /> {vaultName}
-        </span>
+        <label className="vault-name" title="Switch vault">
+          <Icon name="gem" size={15} />
+          <select
+            aria-label="Active vault"
+            value={activeVaultId ?? ''}
+            onChange={(event) => void switchVault(event.target.value)}
+          >
+            {vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
+            {!vaults.length && <option value="">{vaultName}</option>}
+          </select>
+        </label>
         <span className="grow" />
         <button title="Settings" onClick={() => setSettings(true)}>
           <Icon name="settings" size={16} />

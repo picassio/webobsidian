@@ -12,18 +12,20 @@
 The handshake is authoritative. Major protocol mismatch returns 426 and no mutation. Within Protocol 1.x, additions
 must be optional/capability-negotiated and the server supports the current and immediately previous released minor
 during a rolling upgrade. Protocol 1.0 has no earlier minor to retain. Never add a silent fallback that guesses an
-existing entry's revision.
+existing entry's revision. Multi-vault routing is server-side and additive: a paired Protocol 1.0 token selects its
+bound vault, so plugin/headless request shapes do not change.
 
 ## Safe upgrade order
 
-1. Back up the vault and `data/sync` from the same generation; run doctor and clear unresolved recovery alerts.
+1. Back up every vault root and the complete data directory (`data/sync` and `data/vaults/*`) from the same generation; run doctor and clear unresolved recovery alerts.
 2. Upgrade the server first within a compatible protocol line. Verify health, journal sequence, Git backup status,
    and one browser catch-up before releasing all clients.
 3. Upgrade native/headless clients gradually. An older compatible client may continue; an incompatible client must
    pause with diagnostics rather than reset or overwrite.
 4. Re-run a create/modify/rename/delete/attachment/conflict smoke and compare acknowledgements.
 
-For the first Central Sync migration, follow `OPERATIONS.md`: existing vaults remain `backup-required`, pairing is
+Settings v3→v4 preserves the original vault identity/data in place and adds isolated namespaces for later vaults;
+see [Multiple vaults](../MULTI_VAULT.md). For the first Central Sync migration, follow `OPERATIONS.md`: existing vaults remain `backup-required`, pairing is
 blocked, and the assistant commits/pushes a full backup before switching Git to backup-only.
 
 ## Rollback

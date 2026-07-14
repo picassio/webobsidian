@@ -12,10 +12,11 @@ export default function Settings() {
   const setOpen = useStore((s) => s.setSettings);
   const [section, setSection] = useState<Section>('vault');
   const [settings, setSettings] = useState<any>(null);
+  const activeVaultId = useStore((state) => state.activeVaultId);
 
   useEffect(() => {
     if (open) api.getSettings().then(setSettings).catch(() => {});
-  }, [open]);
+  }, [open, activeVaultId]);
 
   if (!open) return null;
 
@@ -31,8 +32,8 @@ export default function Settings() {
             ))}
           </div>
           <div className="settings-content">
-            {settings && section === 'vault' && <VaultSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
-            {section === 'sync' && <SyncSettings />}
+            {settings && section === 'vault' && <VaultSettings key={activeVaultId ?? 'default'} s={settings} reload={() => api.getSettings().then(setSettings)} />}
+            {section === 'sync' && <SyncSettings key={activeVaultId ?? 'default'} />}
             {settings && section === 'git' && <GitSettings s={settings} reload={() => api.getSettings().then(setSettings)} />}
             {section === 'api' && <ApiKeys />}
             {section === 'sharing' && <Shares />}
@@ -288,57 +289,81 @@ function SyncSettings() {
 }
 
 function VaultSettings({ s, reload }: { s: any; reload: () => void }) {
-  const [path, setPath] = useState(s.vault.path);
+  const vaults = useStore((state) => state.vaults);
+  const activeVaultId = useStore((state) => state.activeVaultId);
+  const defaultVaultId = useStore((state) => state.defaultVaultId);
+  const initializeVaults = useStore((state) => state.initializeVaults);
+  const switchVault = useStore((state) => state.switchVault);
+  const [name, setName] = useState('');
+  const [path, setPath] = useState('');
   const [deleteMode, setDeleteMode] = useState(s.vault.deleteMode ?? 'trash');
   const [browser, setBrowser] = useState<any>(null);
-  const save = async () => {
-    await api.putSettings({ vault: { path } });
-    await reload();
-    alert('Vault path saved. Reindex from the command palette if needed.');
+  const [error, setError] = useState('');
+  const refresh = async () => { await initializeVaults(); await reload(); };
+  const addVault = async () => {
+    setError('');
+    try {
+      const result = await api.registerVault(name.trim(), path.trim());
+      await refresh();
+      setName(''); setPath(''); setBrowser(null);
+      await switchVault(result.vault.id);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not register vault'); }
   };
   const saveDeleteMode = async (mode: string) => {
     setDeleteMode(mode);
     await api.putSettings({ vault: { deleteMode: mode } });
     await reload();
   };
-  const browse = async (dir?: string) => setBrowser(await api.browse(dir).catch((e) => ({ error: e.message })));
+  const browse = async (dir?: string) => setBrowser(await api.browse(dir).catch((reason) => ({ error: reason.message })));
+  const makeDefault = async (vaultId: string) => { await api.setDefaultVault(vaultId); await refresh(); };
+  const remove = async (vaultId: string, vaultName: string) => {
+    if (!confirm(`Unregister “${vaultName}”? Its files and runtime data will NOT be deleted.`)) return;
+    try { await api.unregisterVault(vaultId); await refresh(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not unregister vault'); }
+  };
   return (
     <div>
       <h2>Vault & Files</h2>
-      <Row name="Vault path" desc="Absolute path on the server to your notes folder">
-        <input className="text-input" style={{ width: 260 }} value={path} onChange={(e) => setPath(e.target.value)} />
+      <p className="setting-description">Each vault has isolated sync history, devices, search, Git backup, shares and workspace state.</p>
+      {vaults.map((vault) => (
+        <div className="setting-row" key={vault.id}>
+          <div className="info">
+            <div className="name">{vault.name} {vault.id === defaultVaultId && <small>(default)</small>}</div>
+            <div className="desc">{vault.path}<br /><code>{vault.id}</code></div>
+          </div>
+          <div className="control" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {vault.id !== activeVaultId && <button className="btn secondary" onClick={() => void switchVault(vault.id)}>Open</button>}
+            {vault.id !== defaultVaultId && <button className="btn secondary" onClick={() => void makeDefault(vault.id)}>Make default</button>}
+            {vault.id !== defaultVaultId && <button className="btn danger" onClick={() => void remove(vault.id, vault.name)}>Unregister</button>}
+          </div>
+        </div>
+      ))}
+      <h3>Register existing vault</h3>
+      <Row name="Name" desc="Display name shown in the vault switcher">
+        <input className="text-input" value={name} onChange={(event) => setName(event.target.value)} />
+      </Row>
+      <Row name="Server path" desc="Existing, allowed, non-overlapping directory; registration never moves files">
+        <input className="text-input" style={{ width: 260 }} value={path} onChange={(event) => setPath(event.target.value)} />
       </Row>
       <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
-        <button className="btn secondary" onClick={() => browse()}>Browse…</button>
-        <button className="btn" onClick={save}>Save vault path</button>
+        <button className="btn secondary" onClick={() => void browse()}>Browse…</button>
+        <button className="btn" disabled={!name.trim() || !path.trim()} onClick={() => void addVault()}>Register vault</button>
       </div>
       {browser && !browser.error && (
         <div style={{ border: '1px solid var(--bg-modifier-border)', borderRadius: 6, padding: 8, marginTop: 8 }}>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{browser.dir}</div>
-          <div className="result" onClick={() => browse(browser.parent)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name="folder" size={15} /> ..
-          </div>
-          {browser.folders.map((f: any) => (
-            <div className="result" key={f.path} onClick={() => browse(f.path)} onDoubleClick={() => setPath(f.path)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Icon name="folder" size={15} /> {f.name}
-              <button className="btn secondary" style={{ float: 'right', padding: '2px 8px' }} onClick={(e) => { e.stopPropagation(); setPath(f.path); }}>
-                Select
-              </button>
+          <div className="result" onClick={() => void browse(browser.parent)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="folder" size={15} /> ..</div>
+          {browser.folders.map((folder: any) => (
+            <div className="result" key={folder.path} onDoubleClick={() => setPath(folder.path)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Icon name="folder" size={15} /> {folder.name}
+              <button className="btn secondary" style={{ marginLeft: 'auto', padding: '2px 8px' }} onClick={() => setPath(folder.path)}>Select</button>
             </div>
           ))}
         </div>
       )}
-      {browser?.error && <div style={{ color: '#e5534b' }}>{browser.error}</div>}
-      <Row
-        name="When deleting a file"
-        desc="Move to .trash keeps a recoverable copy (Open trash to restore). Permanently delete removes it immediately."
-      >
-        <select
-          className="text-input"
-          style={{ width: 220 }}
-          value={deleteMode}
-          onChange={(e) => saveDeleteMode(e.target.value)}
-        >
+      {(browser?.error || error) && <div style={{ color: '#e5534b' }}>{browser?.error || error}</div>}
+      <Row name="When deleting a file" desc="This setting applies only to the active vault.">
+        <select className="text-input" style={{ width: 220 }} value={deleteMode} onChange={(event) => void saveDeleteMode(event.target.value)}>
           <option value="trash">Move to .trash (recoverable)</option>
           <option value="permanent">Permanently delete</option>
         </select>

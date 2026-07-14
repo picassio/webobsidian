@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardening gates through M40.1 complete; plugin 0.1.12, `@picassio/sync-core@0.1.3`, and `web-vault-sync` public; deployed browser/headless/real-Obsidian Linux acceptance passed; remaining real platforms, independent alpha/beta, stable, and Community acceptance remain externally gated; registry containers removed from scope by user)
+Cập nhật lần cuối: 2026-07-14 (first-class multi-vault deployed and verified with stable v3→v4 identity/bytes, rendered switching, scoped auth, detach/re-register, rollback and guest-reboot recovery; M41.7 remains open only for committed provenance and remote CI)
 
 ---
 
@@ -549,7 +549,9 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [x] M37.2 Commands `init/pair/sync/watch/pull/push/status --json/conflicts/doctor/reset`; stable exit codes,
       non-interactive flags, redacted logs và shell completion/help.
 - [x] M37.3 Local watcher chokidar native + polling fallback, stable write/hash, echo suppression,
-      per-vault single-instance lock, case/Unicode/symlink handling.
+      per-vault single-instance lock, case/Unicode/symlink handling. Real multi-file use exposed and now fixes a
+      concurrent flush race by serializing queue drains and conditionally clearing only the exact observed marker;
+      regression proves one upload/operation and preservation of a newer same-path event.
 - [x] M37.4 Daemon engine: ordered pull/ack, durable local apply intents + offline push queue, idempotent retry,
       reconnect exponential+jitter, graceful SIGTERM; exact modes bidirectional, pull-only restore/quarantine drift,
       push-only metadata/conflict without remote content apply, one-shot durable boundary.
@@ -612,7 +614,65 @@ Cập nhật lần cuối: 2026-07-13 (Central Sync local implementation/hardeni
 - [ ] M40.6 Community plugin approval/installability + support docs: pairing, mobile limitations, conflicts,
       privacy, troubleshooting, compatibility matrix and responsible disclosure.
 
+## Phase 41 — First-class multi-vault in one process — FR-1/FR-13
+- [x] M41.1 Contract/migration: PRD 1.9 + roadmap; settings v4 registry with stable `vaultId`, default vault,
+      v3 in-place migration preserving existing `data/sync` plus immutable mode-0600 pre-v4 settings backup, roots
+      allowed/non-overlapping/non-symlink, unregister never deletes files, rollback backup.
+- [x] M41.2 Runtime isolation: per-vault coordinator/journal/revisions/devices/uploads/blobs/conflicts/retention,
+      watcher, QMD/link/file indexes, Git queue/backup, shares, plugins and workspace; bounded parallel startup and
+      graceful per-vault shutdown.
+- [x] M41.3 Vault administration API: authenticated list/register/update/default/unregister with explicit safety
+      confirmations, health summary and audit-safe errors; legacy API defaults to default vault.
+- [x] M41.4 Request/auth routing: web/session/Agent `X-WebObsidian-Vault-Id`; API keys explicitly scoped to vaults;
+      device token and WS ticket select exactly one vault and cannot be overridden; vault-specific browser cookie.
+- [x] M41.5 Web UX: vault switcher, add/edit/unregister Settings UI, per-vault workspace/browser sync lifecycle,
+      `/vault/<vaultId>/note/...` and graph deep links with legacy default redirects.
+- [x] M41.6 Client compatibility: Protocol 1.0 plugin/headless unchanged after pair; pairing UI targets selected
+      vault; device/conflict/doctor/metrics views scoped; docs and OpenAPI updated.
+- [~] M41.7 Verification: v3 migration/rollback, two simultaneous vault E2E and cross-vault denial, restart/watch,
+      duplicate/overlap/symlink path rejection, token/API-key isolation, browser switch, headless clients on both,
+      backup/restore, typecheck/build/full CI and deployed no-data-loss upgrade. Local/full evidence passes, including
+      a copied-real-production v3 migration with stable vaultId and byte-identical vault. `e2e/multi-vault.mjs` now
+      automates same-path isolation, forged token-header denial, API-key grant denial and restart persistence in CI;
+      actual production deploy, reboot recovery, remote CI and rollback drill remain before `[x]`.
+
 ### Nhật ký tiến độ
+- 2026-07-14 (M41 production deployment and recovery acceptance): created stopped-service vault/data/source backups,
+  deployed the source-built multi-vault image, and verified v3→v4 retained the default `vaultId`, sequence 701 and
+  byte-identical vault while creating mode-0600 immutable migration state. A mount invariant caught a deployment-local
+  override omission before any client resumed; the process had temporarily booted against empty non-authoritative data,
+  so no authoritative bytes changed. The correct persistent bind was restored and the unused empty volume removed.
+  Authenticated API plus rendered Chromium registered/switched two vaults with isolated `index.md` content and scoped
+  deep links; a paired token ignored a forged default-vault header; unregister/re-register retained files and identity,
+  then the disposable vault/device were detached/revoked. A real old-build/v3 rollback followed by forward v4 restore
+  passed at sequence 701, as did a full guest reboot, healthy restart, tailnet HTTPS, permanent pi-para one-shot/timer,
+  and headless doctor (`checkedEntries=637`, no issues). `/api/vaults` now exposes per-vault health, and Compose supports
+  optional `DATA_HOST_PATH` bind storage so backup-visible data does not depend on a private override. M41.7 remains
+  `[~]` only because this working-tree deployment has no committed revision or remote CI run.
+- 2026-07-13 (M41 final local hardening): serialized global settings and vault-registry transactions prevent lost
+  concurrent registrations/updates; realpath-normalized requested allowlists cannot escape through symlinks; v3→v4
+  writes immutable mode-0600 `settings.v3.pre-v4.json`; unregister/shutdown refuse new leases and wait for accepted
+  HTTP/sync-ticket work before projection flush, with fail-safe runtime recovery. Added regressions for concurrent scoped
+  updates/registrations, contested roots, allowlist symlink escape, future schema rejection and runtime drain. Final full
+  92-server/13-web/16-headless tests, typecheck/build/lints, all three E2Es, systemd/Compose checks and latest source
+  Docker build pass. Deployment gates remain unchanged.
+- 2026-07-13 (First-class multi-vault local implementation): settings v4 migrates the existing vault identity/data
+  in place and keeps detached records for identity-preserving re-registration. AsyncLocalStorage request context plus
+  a runtime registry isolate coordinator/journal/revisions/devices/tokens/uploads/blobs/conflicts/retention, watchers,
+  QMD/link/file indexes, Git queues/timers, plugins, shares, workspace and browser IndexedDB. Added vault CRUD/default
+  API, header/API-key scoping, token-selected Protocol 1.0 routing, vault-bound WS tickets/manifest cursors/cookies,
+  selector/settings UX and vault-aware deep links. Added Docker parent mount and systemd template profiles. Also fixed
+  the deployed headless watcher flush race with a serialized lane and exact-marker removal. Full root tests (core,
+  92 server, 13 web, 16 headless), typecheck/build, OpenAPI/docs lint, Compose validation, source Docker build, existing
+  browser/headless E2E and the new automated multi-vault auth/isolation/restart E2E pass. Rendered UI
+  registered/switched/reloaded two vaults with isolated same-path content; two real headless profiles paired
+  to one URL and independently converged; forged vault headers could not override tokens, API key A received 403 on B,
+  restart preserved both, and a copied 9.4 MiB real v3 data + 4.8 MiB vault migrated to v4 preserving vaultId and every
+  vault byte. Production deployment/reboot and remote CI intentionally remain M41.7.
+- 2026-07-13 (First-class multi-vault kickoff): user explicitly expanded scope from the documented one-vault-per-instance
+  workaround to concurrent vaults in one process. PRD 1.9 and the Sync roadmap now preserve legacy default routes and
+  Protocol 1.0 while requiring vault-scoped web requests, token-bound sync runtimes, isolated metadata/index/watch/Git/
+  share/workspace state, non-overlapping real roots, in-place v3 migration and unregister-without-delete semantics.
 - 2026-07-13 (Deployed real-use browser/headless/plugin acceptance): real UI pairing generated one-use credentials
   for two registry-origin `web-vault-sync@0.1.0` clients and exact public plugin 0.1.12 on Obsidian Linux 1.12.7.
   Browser note/link/backlink/search, first-directory PNG drop, two-headless catch-up/diff3/conflict/watch/status/doctor,

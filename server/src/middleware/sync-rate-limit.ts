@@ -53,5 +53,6 @@ export function requireSyncAdminCsrf(req: Request, res: Response, next: NextFunc
 
 export const preAuthSyncRateLimit = syncRateLimit('sync-ip', 300, (req) => req.ip ?? 'unknown');
 export const pairingRateLimit = syncRateLimit('pairing', 10, (req) => req.ip ?? 'unknown');
-export const deviceRateLimit = syncRateLimit('device', 120, (req) => req.syncDevice?.deviceId ?? req.ip ?? 'unknown');
-export const uploadRateLimit = syncRateLimit('upload', 300, (req) => req.syncDevice?.deviceId ?? req.ip ?? 'unknown');
+const deviceKey = (req: Request) => req.syncDevice ? `${req.syncVaultId ?? 'unknown'}:${req.syncDevice.deviceId}` : (req.ip ?? 'unknown');
+export const deviceRateLimit = syncRateLimit('device', 120, deviceKey);
+export const uploadRateLimit = syncRateLimit('upload', 300, deviceKey);

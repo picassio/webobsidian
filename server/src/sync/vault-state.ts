@@ -18,7 +18,7 @@ export class VaultStateStore {
   private state: VaultState | null = null;
   private store: AtomicJsonStore<VaultState> | null = null;
 
-  constructor(private readonly dataDir: string) {}
+  constructor(private readonly dataDir: string, private readonly preferredVaultId?: string) {}
 
   async loadOrCreate(): Promise<VaultState> {
     if (this.state) return this.state;
@@ -32,7 +32,7 @@ export class VaultStateStore {
     const now = new Date().toISOString();
     const created: VaultState = {
       schemaVersion: SYNC_SCHEMA_VERSION,
-      vaultId: `vault_${randomBytes(18).toString('base64url')}`,
+      vaultId: this.preferredVaultId ?? `vault_${randomBytes(18).toString('base64url')}`,
       currentSequence: 0,
       createdAt: now,
       updatedAt: now,

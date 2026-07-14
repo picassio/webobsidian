@@ -1,12 +1,14 @@
-/** Shared broadcaster so any route/service can push messages to all WS clients. */
-type Broadcaster = (msg: unknown) => void;
+import { currentVaultId } from './vault-context.js';
 
-let _broadcast: Broadcaster = () => {};
+/** Shared broadcaster; messages are isolated to the selected vault. */
+type Broadcaster = (msg: unknown, vaultId?: string) => void;
+
+let broadcaster: Broadcaster = () => {};
 
 export function setBroadcaster(fn: Broadcaster): void {
-  _broadcast = fn;
+  broadcaster = fn;
 }
 
 export function broadcast(msg: unknown): void {
-  _broadcast(msg);
+  broadcaster(msg, currentVaultId());
 }

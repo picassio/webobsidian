@@ -1,3 +1,5 @@
+import { currentVaultId } from '../services/vault-context.js';
+
 class SyncTransferMetrics {
   private uploadedBytes = 0;
   private deduplicatedBytes = 0;
@@ -20,4 +22,17 @@ class SyncTransferMetrics {
   }
 }
 
-export const syncTransferMetrics = new SyncTransferMetrics();
+const metrics = new Map<string, SyncTransferMetrics>();
+function currentMetrics(): SyncTransferMetrics {
+  const key = currentVaultId() ?? '__default__';
+  let value = metrics.get(key);
+  if (!value) { value = new SyncTransferMetrics(); metrics.set(key, value); }
+  return value;
+}
+
+export const syncTransferMetrics = new Proxy({} as SyncTransferMetrics, {
+  get(_target, property) {
+    const value = Reflect.get(currentMetrics(), property);
+    return typeof value === 'function' ? value.bind(currentMetrics()) : value;
+  },
+});

@@ -26,8 +26,9 @@ Git remote ◀──────── server-only backup/export snapshots (not 
 ```
 
 The server is authoritative. Every mutation, regardless of origin, passes through one revisioned
-mutation coordinator. The coordinator/revision journal is always active; settings v3 permits pairing only when
-`sync.enabled=true` and `sync.bootstrapState=ready`, while existing vaults start `backup-required` until confirmed
+mutation coordinator. Each vault's coordinator/revision journal is always active; its settings v4 registry record
+permits pairing only when `sync.enabled=true` and `sync.bootstrapState=ready`, while existing vaults start
+`backup-required` until confirmed
 full-backup migration. These settings gate remote access, not write safety. Clients can
 disconnect, reconnect, ask for all changes after their last cursor, and never silently overwrite a revision they
 did not edit.
@@ -98,6 +99,27 @@ the synchronized namespace.
 | Workspace | Per-device by default | Opening a note on one device MUST NOT switch another device. |
 | Transport security | HTTPS outside loopback | Device credentials MUST NOT traverse plaintext networks. |
 | Protocol support | Current + previous minor, same major | Enables rolling upgrades; major mismatch fails closed. |
+| Vault tenancy | Multiple isolated vault runtimes per server process | One login can manage several knowledge bases without mixing revision, device, blob or conflict domains. |
+
+### 3.1 Multi-vault runtime boundary
+
+Each registered vault owns a stable protocol `vaultId`, filesystem root and isolated runtime data directory. The
+migrated default vault preserves the existing `data/sync/` layout; additional vaults use
+`data/vaults/<vaultId>/`. Coordinator, journal sequence, revision projection, devices/tokens, pairing codes,
+uploads/blobs, conflicts, retention, watcher, search/link/file indexes, Git backup, shares and workspace are never
+shared across vaults. Global password/session auth remains shared.
+
+Legacy web/session/Agent URLs select the default vault when no `X-WebObsidian-Vault-Id` is supplied. New web UI
+requests send that header and vault-aware deep links. Device tokens are intrinsically bound to one vault, so
+existing plugin/headless clients and Sync Protocol 1.0 URLs remain compatible: authentication selects the runtime;
+a client cannot override it with a header. Pairing codes are created for one explicit vault. Browser device
+credentials are stored in vault-specific httpOnly cookies.
+
+Vault registration accepts existing directories but never copies or deletes their files. Roots must be real,
+allowed, non-overlapping directories. Settings v3 migration reads the existing sync `vaultId`, creates exactly one
+default registry entry and leaves vault/sync bytes in place. Rollback can therefore use the pre-migration settings
+backup without moving content. Unregistering stops the runtime and removes only its registry entry; data cleanup is
+an explicit separate operator action.
 
 ## 4. Repository and package topology
 

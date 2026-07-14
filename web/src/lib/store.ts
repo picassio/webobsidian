@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { api, type TreeNode, type ShareRecord } from './api';
+import { api, type TreeNode, type ShareRecord, type VaultSummary } from './api';
 import { findNode } from './tree';
 import { IndexedDbSyncPersistence, type PersistedDraft } from './sync-db';
 import type { SyncConnectionStatus } from './sync-engine';
 import { sha256Text } from '@picassio/sync-core';
+import { getActiveVaultId, setActiveVaultId, setDefaultVaultId, setLegacyVaultId } from './vault-selection';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -105,6 +106,12 @@ interface AppState {
   setSyncStatus: (status: SyncConnectionStatus, lag?: number, conflicts?: number) => void;
   mustChangePassword: boolean;
   setMustChangePassword: (v: boolean) => void;
+
+  vaults: VaultSummary[];
+  defaultVaultId: string | null;
+  activeVaultId: string | null;
+  initializeVaults: () => Promise<void>;
+  switchVault: (vaultId: string) => Promise<void>;
 
   tree: TreeNode | null;
   loadTree: () => Promise<void>;
@@ -316,7 +323,7 @@ let syncSaveHandler: ((document: DocumentState) => Promise<boolean>) | null = nu
 export function registerSyncSaveHandler(handler: ((document: DocumentState) => Promise<boolean>) | null): void {
   syncSaveHandler = handler;
 }
-const syncPersistence = new IndexedDbSyncPersistence();
+let syncPersistence = new IndexedDbSyncPersistence();
 
 function persistDraft(document: DocumentState): void {
   const draft: PersistedDraft = {
@@ -357,6 +364,45 @@ export const useStore = create<AppState>()(
       })),
       mustChangePassword: false,
       setMustChangePassword: (v) => set({ mustChangePassword: v }),
+
+      vaults: [],
+      defaultVaultId: null,
+      activeVaultId: getActiveVaultId(),
+      initializeVaults: async () => {
+        const result = await api.listVaults();
+        setDefaultVaultId(result.defaultVaultId);
+        const legacy = result.vaults.find((vault) => vault.storage === 'legacy');
+        if (legacy) setLegacyVaultId(legacy.id);
+        const stored = getActiveVaultId();
+        const urlMatch = typeof location === 'undefined' ? null : location.pathname.match(/^\/vault\/([^/]+)(?:\/|$)/);
+        let urlVaultId: string | null = null;
+        try { urlVaultId = urlMatch ? decodeURIComponent(urlMatch[1]) : null; } catch { urlVaultId = null; }
+        const legacyDeepLink = typeof location !== 'undefined' && (location.pathname === '/graph' || location.pathname.startsWith('/note/'));
+        const requested = result.vaults.some((vault) => vault.id === urlVaultId)
+          ? urlVaultId
+          : legacyDeepLink ? result.defaultVaultId : stored;
+        const activeVaultId = result.vaults.some((vault) => vault.id === requested) ? requested! : result.defaultVaultId;
+        setActiveVaultId(activeVaultId);
+        syncPersistence = new IndexedDbSyncPersistence();
+        set({ vaults: result.vaults, defaultVaultId: result.defaultVaultId, activeVaultId });
+      },
+      switchVault: async (vaultId) => {
+        const state = get();
+        if (state.activeVaultId === vaultId) return;
+        if (!state.vaults.some((vault) => vault.id === vaultId)) throw new Error('Unknown vault');
+        if (state.dirty) await state.save();
+        setActiveVaultId(vaultId);
+        syncPersistence = new IndexedDbSyncPersistence();
+        set({
+          activeVaultId: vaultId,
+          tree: null, tabs: [], activePath: null, history: [], histIndex: -1,
+          content: '', dirty: false, activeEntryId: null, activeRevision: null, activeHash: null,
+          documents: {}, splitPath: null, splitContent: '', recent: [], bookmarks: [], expanded: [],
+          selected: [], clipboard: null, shares: [], syncStatus: 'syncing', syncLag: 0, syncConflictCount: 0,
+        });
+        history.replaceState({}, '', `/vault/${encodeURIComponent(vaultId)}`);
+        await Promise.all([get().loadTree(), get().loadUiState(), get().loadShares()]);
+      },
 
       tree: null,
       loadTree: async () => {

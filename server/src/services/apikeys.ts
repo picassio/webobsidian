@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getSettings, updateSettings, type ApiKeyRecord } from './settings.js';
 import { generateApiKey, hashApiKey } from './auth.js';
+import { currentVaultId } from './vault-context.js';
 
 export type Scope = 'read' | 'write' | 'search';
 
@@ -20,6 +21,7 @@ export async function createKey(
     hash,
     prefix,
     scopes: scopes.length ? scopes : ['read', 'search'],
+    vaultIds: [currentVaultId() ?? (await getSettings()).vaults.defaultVaultId],
     createdAt: new Date().toISOString(),
     lastUsed: null,
   };

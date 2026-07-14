@@ -15,20 +15,23 @@ import {
 } from '@picassio/sync-core';
 import { asyncHandler } from '../middleware/error.js';
 import { requireAuth } from '../middleware/auth.js';
-import { BROWSER_SYNC_COOKIE, requireSecureSyncTransport, requireSyncDevice, syncError } from '../middleware/sync-auth.js';
+import { BROWSER_SYNC_COOKIE, browserSyncCookie, requireSecureSyncTransport, requireSyncDevice, syncError } from '../middleware/sync-auth.js';
 import { deviceRateLimit, pairingRateLimit, preAuthSyncRateLimit, requireSyncAdminCsrf, uploadRateLimit } from '../middleware/sync-rate-limit.js';
-import { getSyncBlobStore, getSyncCoordinator, getSyncDeviceStore, getSyncMaintenanceStatus, getSyncUploadStore } from '../services/sync-runtime.js';
+import {
+  getSyncBlobStore, getSyncCoordinator, getSyncDeviceStore, getSyncMaintenanceStatus, getSyncRuntime, getSyncUploadStore,
+  pairSyncDeviceAcrossVaults, rotateSyncTokenAcrossVaults,
+} from '../services/sync-runtime.js';
 import { wsTickets } from '../sync/ws-tickets.js';
 import { ManifestExpiredError, manifestSnapshots } from '../sync/manifest-snapshots.js';
 import { CoordinatorError } from '../sync/coordinator.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { SyncDoctor } from '../sync/doctor.js';
-import { config } from '../config.js';
 import { getSettings } from '../services/settings.js';
 import { syncTransferMetrics } from '../sync/metrics.js';
 import { JournalStore } from '../sync/journal.js';
 import * as git from '../services/git.js';
 import { disconnectSyncWebSockets } from '../sync/ws-registry.js';
+import { currentVaultId } from '../services/vault-context.js';
 
 export const syncRouter = Router();
 syncRouter.use(requireSecureSyncTransport, preAuthSyncRateLimit);
@@ -57,7 +60,7 @@ syncRouter.post('/browser-devices', requireAuth, requireSyncAdminCsrf, pairingRa
   const issued = await getSyncDeviceStore().createPairingCode(deviceName);
   const paired = await getSyncDeviceStore().pair(issued.code, deviceId.data, deviceName);
   const state = await getSyncCoordinator().protocolState();
-  res.cookie(BROWSER_SYNC_COOKIE, paired.token, {
+  res.cookie(browserSyncCookie(state.vaultId), paired.token, {
     httpOnly: true, secure: req.secure, sameSite: 'strict', path: '/api/sync/v1',
     maxAge: 365 * 24 * 60 * 60 * 1000,
   });
@@ -69,9 +72,9 @@ syncRouter.post('/browser-device/upgrade', requireAuth, requireSyncAdminCsrf, pa
     return syncError(res, 400, 'invalid_request', 'Legacy browser credential is required', false);
   }
   try {
-    const rotated = await getSyncDeviceStore().rotateToken(req.body.token);
-    disconnectSyncWebSockets(rotated.device.deviceId);
-    res.cookie(BROWSER_SYNC_COOKIE, rotated.token, {
+    const { rotated, runtime } = await rotateSyncTokenAcrossVaults(req.body.token);
+    disconnectSyncWebSockets(rotated.device.deviceId, runtime.context.vaultId);
+    res.cookie(browserSyncCookie(runtime.context.vaultId), rotated.token, {
       httpOnly: true, secure: req.secure, sameSite: 'strict', path: '/api/sync/v1',
       maxAge: 365 * 24 * 60 * 60 * 1000,
     });
@@ -82,6 +85,8 @@ syncRouter.post('/browser-device/upgrade', requireAuth, requireSyncAdminCsrf, pa
 }));
 
 syncRouter.post('/browser-device/logout', requireAuth, requireSyncAdminCsrf, asyncHandler(async (_req, res) => {
+  const vaultId = currentVaultId();
+  if (vaultId) res.clearCookie(browserSyncCookie(vaultId), { httpOnly: true, sameSite: 'strict', path: '/api/sync/v1' });
   res.clearCookie(BROWSER_SYNC_COOKIE, { httpOnly: true, sameSite: 'strict', path: '/api/sync/v1' });
   res.status(204).end();
 }));
@@ -94,8 +99,8 @@ syncRouter.post('/pair', pairingRateLimit, asyncHandler(async (req, res) => {
     return syncError(res, 426, 'protocol_incompatible', `Server supports protocol ${PROTOCOL_VERSION}`, false);
   }
   try {
-    const paired = await getSyncDeviceStore().pair(parsed.data.code, parsed.data.deviceId, parsed.data.deviceName);
-    const state = await getSyncCoordinator().protocolState();
+    const { paired, runtime } = await pairSyncDeviceAcrossVaults(parsed.data.code, parsed.data.deviceId, parsed.data.deviceName);
+    const state = await runtime.coordinator.protocolState();
     res.status(201).json({ protocolVersion: PROTOCOL_VERSION, vaultId: state.vaultId, deviceId: paired.device.deviceId, token: paired.token });
   } catch (error) {
     syncError(res, 401, 'token_invalid', error instanceof Error ? error.message : 'Pairing failed', false);
@@ -130,11 +135,11 @@ syncRouter.get('/manifest', requireSyncDevice, deviceRateLimit, asyncHandler(asy
   if (!Number.isSafeInteger(limit)) return syncError(res, 400, 'invalid_request', 'Invalid manifest limit', false);
   if (typeof req.query.cursor !== 'string') {
     const captured = await getSyncCoordinator().captureManifest();
-    res.json({ protocolVersion: PROTOCOL_VERSION, ...manifestSnapshots.create(captured.entries, captured.sequence, limit) });
+    res.json({ protocolVersion: PROTOCOL_VERSION, ...manifestSnapshots.create(captured.entries, captured.sequence, limit, req.syncVaultId) });
     return;
   }
   try {
-    res.json({ protocolVersion: PROTOCOL_VERSION, ...manifestSnapshots.page(req.query.cursor, limit) });
+    res.json({ protocolVersion: PROTOCOL_VERSION, ...manifestSnapshots.page(req.query.cursor, limit, req.syncVaultId) });
   } catch (error) {
     if (error instanceof ManifestExpiredError) return syncError(res, 410, 'manifest_expired', error.message, false);
     throw error;
@@ -319,7 +324,7 @@ syncRouter.post('/blob-uploads/:uploadId/complete', requireSyncDevice, deviceRat
 }));
 
 syncRouter.post('/ws-tickets', requireSyncDevice, deviceRateLimit, asyncHandler(async (req, res) => {
-  const issued = wsTickets.issue(req.syncDevice!.deviceId);
+  const issued = wsTickets.issue(req.syncDevice!.deviceId, req.syncVaultId!);
   res.status(201).json({ protocolVersion: PROTOCOL_VERSION, ...issued });
 }));
 
@@ -327,7 +332,7 @@ syncRouter.get('/health', requireAuth, asyncHandler(async (_req, res) => {
   const coordinator = getSyncCoordinator();
   const health = coordinator.health();
   const devices = await getSyncDeviceStore().list();
-  const segments = await new JournalStore(config.dataDir).segments();
+  const segments = await new JournalStore(getSyncRuntime().context.dataDir).segments();
   const journalBytes = (await Promise.all(segments.map((segment) => fs.stat(segment.file).then((item) => item.size).catch(() => 0)))).reduce((sum, size) => sum + size, 0);
   const gitStatus = await git.status().catch(() => null);
   const gitBackup = gitStatus ? {
@@ -389,7 +394,7 @@ syncRouter.get('/metrics', requireAuth, asyncHandler(async (_req, res) => {
 }));
 
 syncRouter.get('/doctor', requireAuth, deviceRateLimit, asyncHandler(async (_req, res) => {
-  const report = await new SyncDoctor(config.dataDir, getSyncCoordinator().vaultRootPath()).run();
+  const report = await new SyncDoctor(getSyncRuntime().context.dataDir, getSyncCoordinator().vaultRootPath()).run();
   res.json({ protocolVersion: PROTOCOL_VERSION, ...report });
 }));
 
@@ -400,7 +405,7 @@ syncRouter.get('/devices', requireAuth, asyncHandler(async (_req, res) => {
 syncRouter.delete('/devices/:deviceId', requireAuth, requireSyncAdminCsrf, pairingRateLimit, asyncHandler(async (req, res) => {
   try {
     await getSyncDeviceStore().revoke(req.params.deviceId);
-    disconnectSyncWebSockets(req.params.deviceId);
+    disconnectSyncWebSockets(req.params.deviceId, currentVaultId());
     res.status(204).end();
   } catch (error) {
     syncError(res, 404, 'invalid_request', error instanceof Error ? error.message : 'Unknown device', false);

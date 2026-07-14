@@ -14,7 +14,7 @@ import VersionHistory from './components/VersionHistory';
 import TrashView from './components/TrashView';
 import ContextMenu from './components/ContextMenu';
 import FolderPicker from './components/FolderPicker';
-import { loadPlugins } from './lib/plugins';
+import { loadPlugins, unloadPlugins } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
 import { initializeBrowserSync } from './lib/browser-sync-runtime';
@@ -25,6 +25,8 @@ export default function App() {
   const mustChangePassword = useStore((s) => s.mustChangePassword);
   const setMustChangePassword = useStore((s) => s.setMustChangePassword);
   const loadTree = useStore((s) => s.loadTree);
+  const initializeVaults = useStore((s) => s.initializeVaults);
+  const activeVaultId = useStore((s) => s.activeVaultId);
   const leftOpen = useStore((s) => s.leftOpen);
   const rightOpen = useStore((s) => s.rightOpen);
   const mobileDrawer = useStore((s) => s.mobileDrawer);
@@ -52,6 +54,11 @@ export default function App() {
 
   useEffect(() => {
     if (!authed) return;
+    void initializeVaults().catch(() => useStore.getState().notify('Could not load vault registry'));
+  }, [authed, initializeVaults]);
+
+  useEffect(() => {
+    if (!authed || !activeVaultId) return;
     loadTree();
     // Deep link (/note/<path>) wins over the restored workspace's active note.
     const deepLink = initUrlSync();
@@ -78,7 +85,7 @@ export default function App() {
     }).catch(() => useStore.getState().setSyncStatus('error'));
     // Legacy web-session socket still refreshes non-sync projections; ordered content catch-up uses BrowserSyncEngine.
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const ws = new WebSocket(`${proto}://${location.host}/ws?vaultId=${encodeURIComponent(activeVaultId)}`);
     let treeTimer: number | undefined;
     ws.onmessage = (ev) => {
       try {
@@ -96,10 +103,11 @@ export default function App() {
     return () => {
       disposed = true;
       stopBrowserSync();
+      void unloadPlugins(activeVaultId);
       window.clearTimeout(treeTimer);
       ws.close();
     };
-  }, [authed, loadTree]);
+  }, [authed, activeVaultId, loadTree]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

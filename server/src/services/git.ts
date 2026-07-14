@@ -6,6 +6,7 @@ import { getVaultRoot } from './vault.js';
 import { redactUrlCreds } from '../lib/redact.js';
 import { getSyncCoordinator } from './sync-runtime.js';
 import { config } from '../config.js';
+import { currentVaultContext, currentVaultId, runInVault } from './vault-context.js';
 
 /** GitHub-native sync with Git LFS support (PRD FR-4). */
 
@@ -43,7 +44,7 @@ async function git(): Promise<SimpleGit> {
 // ops through one async queue removes the race; clearing a stale lock at the head
 // of each op heals a leftover from a crash or an external Obsidian-git process.
 // ---------------------------------------------------------------------------
-let gitQueue: Promise<unknown> = Promise.resolve();
+const gitQueues = new Map<string, Promise<unknown>>();
 
 /** A lock a live git process holds is gone within a second for a notes vault; one
  *  older than this is orphaned. Generous enough that even an external LFS commit
@@ -70,14 +71,13 @@ async function clearStaleLocks(): Promise<void> {
 /** Run `fn` with exclusive access to the vault repo, after self-healing any stale
  *  lock. Ops queue (never overlap); a rejecting op doesn't poison the queue. */
 function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
-  const result = gitQueue.then(async () => {
+  const key = currentVaultId() ?? '__default__';
+  const queue = gitQueues.get(key) ?? Promise.resolve();
+  const result = queue.then(async () => {
     await clearStaleLocks();
     return fn();
   });
-  gitQueue = result.then(
-    () => undefined,
-    () => undefined,
-  );
+  gitQueues.set(key, result.then(() => undefined, () => undefined));
   return result;
 }
 
@@ -111,7 +111,7 @@ export async function cloneForImport(): Promise<{ directory: string; cleanup: ()
   const remote = await authedRemote();
   if (!remote) throw new Error('No remote configured');
   const settings = await getSettings();
-  const importsRoot = path.join(config.dataDir, 'sync', 'imports');
+  const importsRoot = path.join(currentVaultContext()?.dataDir ?? config.dataDir, 'sync', 'imports');
   await fs.mkdir(importsRoot, { recursive: true, mode: 0o700 });
   const directory = await fs.mkdtemp(path.join(importsRoot, 'git-'));
   try {
@@ -426,13 +426,19 @@ async function pushImpl(): Promise<string> {
 }
 
 // Debounced auto-commit (+push) after saves, when enabled in settings.
-let autoCommitTimer: NodeJS.Timeout | null = null;
-let autoCommitFailures = 0;
+const autoCommitTimers = new Map<string, NodeJS.Timeout>();
+const autoCommitFailures = new Map<string, number>();
 export function scheduleAutoCommitOnSave(): void {
-  if (autoCommitTimer) clearTimeout(autoCommitTimer);
-  autoCommitTimer = setTimeout(runAutoCommitBackup, 5000);
+  const context = currentVaultContext();
+  const key = context?.vaultId ?? '__default__';
+  const prior = autoCommitTimers.get(key);
+  if (prior) clearTimeout(prior);
+  const timer = setTimeout(() => void (context ? runInVault(context, runAutoCommitBackup) : runAutoCommitBackup()), 5000);
+  timer.unref();
+  autoCommitTimers.set(key, timer);
 }
 async function runAutoCommitBackup(): Promise<void> {
+  const key = currentVaultId() ?? '__default__';
   try {
     const s = await getSettings();
     if (!s.git.enabled || !s.git.autoCommitOnSave) return;
@@ -442,12 +448,16 @@ async function runAutoCommitBackup(): Promise<void> {
       const result = await sync();
       if (!result.ok) throw new Error(result.log.at(-1) ?? 'Git backup failed');
     } else await commitAll();
-    autoCommitFailures = 0;
-  } catch (e: any) {
-    autoCommitFailures += 1;
-    const delay = Math.min(60 * 60_000, 5000 * 2 ** Math.min(autoCommitFailures, 8));
-    console.warn(`[git-backup] auto-commit failed; retry in ${Math.round(delay / 1000)}s:`, redactUrlCreds(e.message));
-    autoCommitTimer = setTimeout(runAutoCommitBackup, delay);
+    autoCommitFailures.set(key, 0);
+  } catch (error) {
+    const failures = (autoCommitFailures.get(key) ?? 0) + 1;
+    autoCommitFailures.set(key, failures);
+    const delay = Math.min(60 * 60_000, 5000 * 2 ** Math.min(failures, 8));
+    console.warn(`[git-backup] vault=${key} auto-commit failed; retry in ${Math.round(delay / 1000)}s:`, redactUrlCreds(error instanceof Error ? error.message : String(error)));
+    const context = currentVaultContext();
+    const timer = setTimeout(() => void (context ? runInVault(context, runAutoCommitBackup) : runAutoCommitBackup()), delay);
+    timer.unref();
+    autoCommitTimers.set(key, timer);
   }
 }
 

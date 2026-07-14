@@ -3,6 +3,8 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { config, SETTINGS_FILE } from '../config.js';
+import { VaultStateStore } from '../sync/vault-state.js';
+import { currentVaultId } from './vault-context.js';
 
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
@@ -10,112 +12,162 @@ const ApiKeySchema = z.object({
   id: z.string(),
   name: z.string(),
   hash: z.string(),
-  prefix: z.string(), // first chars, for display
+  prefix: z.string(),
   scopes: z.array(z.enum(['read', 'write', 'search'])).default(['read', 'search']),
+  vaultIds: z.union([z.literal('*'), z.array(z.string())]).optional(),
   createdAt: z.string(),
   lastUsed: z.string().nullable().default(null),
 });
 
-const SettingsSchema = z.object({
-  version: z.literal(3).default(3),
-  auth: z
-    .object({
-      // Mật khẩu người dùng đã đổi. Rỗng = đang dùng mật khẩu mặc định (123456).
-      userPasswordHash: z.string().default(''),
-      // Mật khẩu override để khôi phục khi quên pass (sửa tay vào file). Rỗng = không có.
-      passwordHash: z.string().default(''),
-      jwtSecret: z.string().default(''),
-    })
-    .default({}),
-  vault: z
-    .object({
-      path: z.string().default(''),
-      allowedRoots: z.array(z.string()).default([]),
-      trash: z.string().default('.trash'),
-      // Xoá file: 'trash' = chuyển vào thư mục .trash (khôi phục được);
-      // 'permanent' = xoá vĩnh viễn ngay.
-      deleteMode: z.enum(['trash', 'permanent']).default('trash'),
-      attachmentDir: z.string().default('attachments'),
-    })
-    .default({}),
-  git: z
-    .object({
-      enabled: z.boolean().default(false),
-      mode: z.enum(['legacy-bidirectional', 'backup-only']).default('backup-only'),
-      remote: z.string().default(''),
-      branch: z.string().default('main'),
-      token: z.string().default(''),
-      authorName: z.string().default('WebObsidian'),
-      authorEmail: z.string().default('webobsidian@localhost'),
-      autoSync: z.boolean().default(false),
-      autoCommitOnSave: z.boolean().default(false),
-      intervalSec: z.number().default(300),
-      lfsPatterns: z
-        .array(z.string())
-        .default(['*.png', '*.jpg', '*.jpeg', '*.gif', '*.pdf', '*.mp4', '*.mov', '*.zip']),
-    })
-    .default({}),
-  sync: z.object({
-    enabled: z.boolean().default(true),
-    bootstrapState: z.enum(['backup-required', 'ready']).default('ready'),
-  }).default({}),
-  search: z
-    .object({
-      fuzzy: z.number().default(0.2),
-      prefix: z.boolean().default(true),
-      indexFrontmatter: z.boolean().default(true),
-    })
-    .default({}),
-  api: z
-    .object({
-      keys: z.array(ApiKeySchema).default([]),
-      rateLimitPerMin: z.number().default(120),
-    })
-    .default({}),
-  ui: z
-    .object({
-      theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
-      defaultView: z.enum(['live', 'source', 'reading']).default('live'),
-    })
-    .default({}),
-  plugins: z
-    .object({
-      enabled: z.array(z.string()).default([]),
-      installed: z.array(z.string()).default([]),
-    })
-    .default({}),
+const VaultFsSchema = z.object({
+  path: z.string().default(''),
+  allowedRoots: z.array(z.string()).default([]),
+  trash: z.string().default('.trash'),
+  deleteMode: z.enum(['trash', 'permanent']).default('trash'),
+  attachmentDir: z.string().default('attachments'),
 });
 
-export type Settings = z.infer<typeof SettingsSchema>;
+const SyncSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  bootstrapState: z.enum(['backup-required', 'ready']).default('ready'),
+});
+
+const GitSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  mode: z.enum(['legacy-bidirectional', 'backup-only']).default('backup-only'),
+  remote: z.string().default(''),
+  branch: z.string().default('main'),
+  token: z.string().default(''),
+  authorName: z.string().default('WebObsidian'),
+  authorEmail: z.string().default('webobsidian@localhost'),
+  autoSync: z.boolean().default(false),
+  autoCommitOnSave: z.boolean().default(false),
+  intervalSec: z.number().default(300),
+  lfsPatterns: z.array(z.string()).default(['*.png', '*.jpg', '*.jpeg', '*.gif', '*.pdf', '*.mp4', '*.mov', '*.zip']),
+});
+
+const PluginSettingsSchema = z.object({
+  enabled: z.array(z.string()).default([]),
+  installed: z.array(z.string()).default([]),
+});
+
+export const VaultRecordSchema = VaultFsSchema.extend({
+  id: z.string().min(16).max(128).regex(/^[A-Za-z0-9_-]+$/),
+  name: z.string().trim().min(1).max(128),
+  storage: z.enum(['legacy', 'isolated']).default('isolated'),
+  sync: SyncSettingsSchema.default({}),
+  git: GitSettingsSchema.default({}),
+  plugins: PluginSettingsSchema.default({}),
+});
+export type VaultRecord = z.infer<typeof VaultRecordSchema>;
+
+const VaultRegistrySchema = z.object({
+  defaultVaultId: z.string(),
+  items: z.array(VaultRecordSchema).min(1),
+  detached: z.array(VaultRecordSchema).default([]),
+}).superRefine((registry, ctx) => {
+  const ids = new Set<string>();
+  for (const [index, item] of [...registry.items, ...registry.detached].entries()) {
+    if (ids.has(item.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['items', index, 'id'], message: 'Duplicate vault id' });
+    ids.add(item.id);
+  }
+  if (!ids.has(registry.defaultVaultId)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['defaultVaultId'], message: 'Default vault is not registered' });
+  }
+});
+
+const SettingsSchema = z.object({
+  version: z.literal(4).default(4),
+  auth: z.object({
+    userPasswordHash: z.string().default(''),
+    passwordHash: z.string().default(''),
+    jwtSecret: z.string().default(''),
+  }).default({}),
+  vaults: VaultRegistrySchema,
+  search: z.object({
+    fuzzy: z.number().default(0.2),
+    prefix: z.boolean().default(true),
+    indexFrontmatter: z.boolean().default(true),
+  }).default({}),
+  api: z.object({
+    keys: z.array(ApiKeySchema).default([]),
+    rateLimitPerMin: z.number().default(120),
+  }).default({}),
+  ui: z.object({
+    theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
+    defaultView: z.enum(['live', 'source', 'reading']).default('live'),
+  }).default({}),
+});
+
+const LegacySettingsSchema = z.object({
+  version: z.number().default(1),
+  auth: z.object({ userPasswordHash: z.string().default(''), passwordHash: z.string().default(''), jwtSecret: z.string().default('') }).default({}),
+  vault: VaultFsSchema.default({}),
+  sync: SyncSettingsSchema.default({}),
+  git: GitSettingsSchema.default({}),
+  search: z.object({ fuzzy: z.number().default(0.2), prefix: z.boolean().default(true), indexFrontmatter: z.boolean().default(true) }).default({}),
+  api: z.object({ keys: z.array(ApiKeySchema).default([]), rateLimitPerMin: z.number().default(120) }).default({}),
+  ui: z.object({ theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'), defaultView: z.enum(['live', 'source', 'reading']).default('live') }).default({}),
+  plugins: PluginSettingsSchema.default({}),
+});
+
+export type PersistedSettings = z.infer<typeof SettingsSchema>;
 export type ApiKeyRecord = z.infer<typeof ApiKeySchema>;
+/** Compatibility projection used by existing vault-scoped services. */
+export type Settings = PersistedSettings & {
+  vault: z.infer<typeof VaultFsSchema>;
+  sync: z.infer<typeof SyncSettingsSchema>;
+  git: z.infer<typeof GitSettingsSchema>;
+  plugins: z.infer<typeof PluginSettingsSchema>;
+};
 
-/** ---- Store --------------------------------------------------------------- */
+let cache: PersistedSettings | null = null;
+let updateLane: Promise<void> = Promise.resolve();
 
-let cache: Settings | null = null;
+function serializeUpdate<T>(operation: () => Promise<T>): Promise<T> {
+  const result = updateLane.then(operation, operation);
+  updateLane = result.then(() => undefined, () => undefined);
+  return result;
+}
 
-function defaults(): Settings {
-  const base = SettingsSchema.parse({});
+function defaultVaultFs() {
+  const vault = VaultFsSchema.parse({ path: config.defaultVaultPath });
+  vault.allowedRoots = config.allowedRoots.length ? config.allowedRoots : [path.dirname(config.defaultVaultPath), config.defaultVaultPath];
+  return vault;
+}
+
+async function defaults(): Promise<PersistedSettings> {
+  const state = await new VaultStateStore(config.dataDir).loadOrCreate();
+  const vault = defaultVaultFs();
+  const record = VaultRecordSchema.parse({ id: state.vaultId, name: path.basename(vault.path) || 'Vault', storage: 'legacy', ...vault });
+  const base = SettingsSchema.parse({ version: 4, vaults: { defaultVaultId: record.id, items: [record] } });
   base.auth.jwtSecret = randomBytes(48).toString('hex');
-  base.vault.path = config.defaultVaultPath;
-  base.vault.allowedRoots = config.allowedRoots.length
-    ? config.allowedRoots
-    : [path.dirname(config.defaultVaultPath), config.defaultVaultPath];
   return base;
 }
 
-/**
- * Guarantee the folder browser can reach the configured vault. The default
- * allowedRoots are derived from the sample vault, so pointing the vault at a
- * path outside them (e.g. ~/ObsidianVault) made Browse… return 403 with
- * "Path outside allowed roots". Add the vault's parent directory as a root
- * whenever it isn't already covered. Returns true if it mutated the draft.
- */
+function selectedRecord(settings: PersistedSettings, requested = currentVaultId()): VaultRecord {
+  const id = requested ?? settings.vaults.defaultVaultId;
+  return settings.vaults.items.find((item) => item.id === id)
+    ?? settings.vaults.items.find((item) => item.id === settings.vaults.defaultVaultId)!;
+}
+
+function project(settings: PersistedSettings, requested = currentVaultId()): Settings {
+  const item = selectedRecord(settings, requested);
+  return {
+    ...settings,
+    vault: { path: item.path, allowedRoots: [...item.allowedRoots], trash: item.trash, deleteMode: item.deleteMode, attachmentDir: item.attachmentDir },
+    sync: structuredClone(item.sync),
+    git: structuredClone(item.git),
+    plugins: structuredClone(item.plugins),
+  };
+}
+
 export function ensureVaultBrowsable(d: Settings): boolean {
   const vaultPath = path.resolve(d.vault.path);
   const roots = d.vault.allowedRoots ?? [];
-  const covered = roots.some((r) => {
-    const rr = path.resolve(r);
-    return vaultPath === rr || vaultPath.startsWith(rr + path.sep);
+  const covered = roots.some((root) => {
+    const resolved = path.resolve(root);
+    return vaultPath === resolved || vaultPath.startsWith(`${resolved}${path.sep}`);
   });
   if (covered) return false;
   d.vault.allowedRoots = [...roots, path.dirname(vaultPath)];
@@ -126,113 +178,193 @@ async function ensureDataDir(): Promise<void> {
   await fs.mkdir(config.dataDir, { recursive: true });
 }
 
-/** Atomic write: write to tmp then rename; keep a .bak of the previous file. */
-async function persist(s: Settings): Promise<void> {
+async function persist(settings: PersistedSettings): Promise<void> {
   await ensureDataDir();
-  const json = JSON.stringify(s, null, 2);
+  const json = JSON.stringify(settings, null, 2);
   const tmp = `${SETTINGS_FILE}.tmp-${randomBytes(4).toString('hex')}`;
   await fs.writeFile(tmp, json, { mode: 0o600 });
-  try {
-    await fs.copyFile(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
-  } catch {
-    /* no previous file */
-  }
+  try { await fs.copyFile(SETTINGS_FILE, `${SETTINGS_FILE}.bak`); } catch { /* first write */ }
   await fs.rename(tmp, SETTINGS_FILE);
 }
 
+async function preservePreV4Settings(sourceVersion: number, raw: string): Promise<void> {
+  const backup = path.join(config.dataDir, `settings.v${sourceVersion}.pre-v4.json`);
+  try {
+    await fs.writeFile(backup, raw, { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    if (await fs.readFile(backup, 'utf8') !== raw) {
+      throw new Error(`immutable pre-v4 settings backup already exists with different content: ${path.basename(backup)}`);
+    }
+  }
+}
+
+async function migrateLegacy(input: Record<string, unknown>): Promise<PersistedSettings> {
+  const sourceVersion = Number(input.version ?? 1);
+  const legacyInput = structuredClone(input);
+  if (sourceVersion < 2) {
+    const priorGit = legacyInput.git && typeof legacyInput.git === 'object' ? legacyInput.git as Record<string, unknown> : {};
+    legacyInput.sync = { enabled: false, bootstrapState: 'backup-required' };
+    legacyInput.git = { ...priorGit, mode: 'legacy-bidirectional' };
+  } else if (sourceVersion === 2) {
+    const priorSync = legacyInput.sync && typeof legacyInput.sync === 'object' ? legacyInput.sync as Record<string, unknown> : {};
+    legacyInput.sync = { ...priorSync, bootstrapState: priorSync.enabled === false ? 'backup-required' : 'ready' };
+  }
+  const legacy = LegacySettingsSchema.parse(legacyInput);
+  if (!legacy.vault.path) legacy.vault.path = config.defaultVaultPath;
+  if (!legacy.vault.allowedRoots.length) legacy.vault.allowedRoots = defaultVaultFs().allowedRoots;
+  if (legacy.auth.passwordHash && !legacy.auth.userPasswordHash) {
+    legacy.auth.userPasswordHash = legacy.auth.passwordHash;
+    legacy.auth.passwordHash = '';
+  }
+  if (!legacy.auth.jwtSecret) legacy.auth.jwtSecret = randomBytes(48).toString('hex');
+  const state = await new VaultStateStore(config.dataDir).loadOrCreate();
+  const record = VaultRecordSchema.parse({
+    id: state.vaultId,
+    name: path.basename(path.resolve(legacy.vault.path)) || 'Vault',
+    storage: 'legacy',
+    ...legacy.vault,
+    sync: legacy.sync,
+    git: legacy.git,
+    plugins: legacy.plugins,
+  });
+  return SettingsSchema.parse({
+    version: 4,
+    auth: legacy.auth,
+    vaults: { defaultVaultId: record.id, items: [record] },
+    search: legacy.search,
+    api: {
+      ...legacy.api,
+      keys: legacy.api.keys.map((key) => ({ ...key, vaultIds: key.vaultIds ?? [record.id] })),
+    },
+    ui: legacy.ui,
+  });
+}
+
 export async function loadSettings(): Promise<Settings> {
-  if (cache) return cache;
+  if (cache) return project(cache);
   await ensureDataDir();
   try {
     const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
     const input = JSON.parse(raw) as Record<string, unknown>;
     const sourceVersion = Number(input.version ?? 1);
-    const legacy = sourceVersion < 2;
-    if (legacy) {
-      const legacyGit = input.git && typeof input.git === 'object' ? input.git as Record<string, unknown> : {};
-      input.sync = { enabled: false, bootstrapState: 'backup-required' };
-      input.git = { ...legacyGit, mode: 'legacy-bidirectional' };
-    } else if (sourceVersion === 2) {
-      const priorSync = input.sync && typeof input.sync === 'object' ? input.sync as Record<string, unknown> : {};
-      input.sync = { ...priorSync, bootstrapState: priorSync.enabled === false ? 'backup-required' : 'ready' };
+    if (!Number.isInteger(sourceVersion) || sourceVersion < 1 || sourceVersion > 4) {
+      throw new Error(`unsupported settings version: ${String(input.version)}`);
     }
-    input.version = 3;
-    const parsed = SettingsSchema.parse(input);
-    // Backfill secrets that may be empty in older files.
-    let dirty = sourceVersion < 3;
+    let parsed: PersistedSettings;
+    let dirty = false;
+    if (sourceVersion === 4) parsed = SettingsSchema.parse(input);
+    else {
+      parsed = await migrateLegacy(input);
+      await preservePreV4Settings(sourceVersion, raw);
+      dirty = true;
+    }
     if (!parsed.auth.jwtSecret) {
       parsed.auth.jwtSecret = randomBytes(48).toString('hex');
       dirty = true;
     }
-    // Migration: trước đây `passwordHash` là mật khẩu đăng nhập. Mô hình mới coi
-    // `passwordHash` là mật khẩu override và `userPasswordHash` là pass đăng nhập
-    // (rỗng = mặc định 123456). Để file cũ không bị backdoor bằng 123456, chuyển
-    // pass cũ sang `userPasswordHash` rồi xoá field override.
-    if (parsed.auth.passwordHash && !parsed.auth.userPasswordHash) {
-      parsed.auth.userPasswordHash = parsed.auth.passwordHash;
-      parsed.auth.passwordHash = '';
-      dirty = true;
-    }
-    // Heal older files whose allowedRoots predate the current vault path.
-    if (ensureVaultBrowsable(parsed)) dirty = true;
     cache = parsed;
-    if (dirty) await persist(cache);
+    if (dirty) await persist(parsed);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw new Error(`settings.json is invalid; refusing to replace it: ${error instanceof Error ? error.message : String(error)}`);
     }
-    cache = defaults();
-    const entries = await fs.readdir(cache.vault.path).catch((readError: NodeJS.ErrnoException) => {
+    cache = await defaults();
+    const record = selectedRecord(cache);
+    const entries = await fs.readdir(record.path).catch((readError: NodeJS.ErrnoException) => {
       if (readError.code === 'ENOENT') return [] as string[];
       throw readError;
     });
     const existingVault = entries.some((entry) => !['.git', '.obsidian', '.trash'].includes(entry));
     if (existingVault) {
-      cache.sync.enabled = false;
-      cache.sync.bootstrapState = 'backup-required';
-      cache.git.mode = 'legacy-bidirectional';
+      record.sync.enabled = false;
+      record.sync.bootstrapState = 'backup-required';
+      record.git.mode = 'legacy-bidirectional';
     }
     await persist(cache);
   }
-  return cache;
+  return project(cache);
+}
+
+export async function getPersistedSettings(): Promise<PersistedSettings> {
+  if (!cache) await loadSettings();
+  return structuredClone(cache!);
 }
 
 export async function getSettings(): Promise<Settings> {
-  return cache ?? (await loadSettings());
+  if (!cache) await loadSettings();
+  return project(cache!);
 }
 
-/** Mutate settings via an updater fn, validate, persist, and refresh cache. */
-export async function updateSettings(
-  mutator: (draft: Settings) => void | Promise<void>,
-): Promise<Settings> {
-  const current = await getSettings();
-  const draft: Settings = JSON.parse(JSON.stringify(current));
-  await mutator(draft);
-  const validated = SettingsSchema.parse(draft);
-  cache = validated;
-  await persist(validated);
-  return validated;
+export async function getVaultRecord(vaultId = currentVaultId()): Promise<VaultRecord> {
+  if (!cache) await loadSettings();
+  const item = selectedRecord(cache!, vaultId);
+  return structuredClone(item);
 }
 
-/** Redact secrets for sending to the client. */
-export function redactSettings(s: Settings) {
+export function updateSettings(mutator: (draft: Settings) => void | Promise<void>): Promise<Settings> {
+  return serializeUpdate(async () => {
+    if (!cache) await loadSettings();
+    const selectedId = currentVaultId() ?? cache!.vaults.defaultVaultId;
+    const draft = structuredClone(project(cache!, selectedId));
+    await mutator(draft);
+    const index = draft.vaults.items.findIndex((item) => item.id === selectedId);
+    if (index < 0) throw new Error('Selected vault is no longer registered');
+    draft.vaults.items[index] = VaultRecordSchema.parse({
+      ...draft.vaults.items[index],
+      ...draft.vault,
+      sync: draft.sync,
+      git: draft.git,
+      plugins: draft.plugins,
+    });
+    const validated = SettingsSchema.parse(draft);
+    await persist(validated);
+    cache = validated;
+    return project(validated, selectedId);
+  });
+}
+
+export function updateVaultRegistry(
+  mutator: (draft: PersistedSettings) => void | Promise<void>,
+): Promise<PersistedSettings> {
+  return serializeUpdate(async () => {
+    if (!cache) await loadSettings();
+    const draft = structuredClone(cache!);
+    await mutator(draft);
+    const validated = SettingsSchema.parse(draft);
+    await persist(validated);
+    cache = validated;
+    return structuredClone(validated);
+  });
+}
+
+function redactVault(item: VaultRecord) {
+  return { ...item, git: { ...item.git, token: item.git.token ? '••••••••' : '' } };
+}
+
+export function redactSettings(settings: Settings) {
   return {
-    ...s,
+    ...settings,
     auth: {
-      // hasCustomPassword=false nghĩa là đang dùng mật khẩu mặc định (123456).
-      hasCustomPassword: Boolean(s.auth.userPasswordHash),
-      hasOverridePassword: Boolean(s.auth.passwordHash),
+      hasCustomPassword: Boolean(settings.auth.userPasswordHash),
+      hasOverridePassword: Boolean(settings.auth.passwordHash),
     },
-    git: { ...s.git, token: s.git.token ? '••••••••' : '' },
+    vaults: {
+      ...settings.vaults,
+      items: settings.vaults.items.map(redactVault),
+      detached: settings.vaults.detached.map(redactVault),
+    },
+    git: { ...settings.git, token: settings.git.token ? '••••••••' : '' },
     api: {
-      ...s.api,
-      keys: s.api.keys.map((k) => ({
-        id: k.id,
-        name: k.name,
-        prefix: k.prefix,
-        scopes: k.scopes,
-        createdAt: k.createdAt,
-        lastUsed: k.lastUsed,
+      ...settings.api,
+      keys: settings.api.keys.map((key) => ({
+        id: key.id,
+        name: key.name,
+        prefix: key.prefix,
+        scopes: key.scopes,
+        vaultIds: key.vaultIds,
+        createdAt: key.createdAt,
+        lastUsed: key.lastUsed,
       })),
     },
   };

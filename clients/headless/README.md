@@ -73,6 +73,16 @@ sudo -u web-vault-sync web-vault-sync --config-dir /var/lib/web-vault-sync docto
 The unit intentionally uses `Type=simple`; it does not claim `sd_notify` watchdog or in-place reload support.
 Use `systemctl restart web-vault-sync` after configuration changes.
 
+For several local vaults, install `web-vault-sync@.service` and use one profile per vault. Each profile has its own
+`/etc/web-vault-sync/<profile>/token`, `/var/lib/web-vault-sync-<profile>` config/state/lock, pairing credential and
+vault-path `ReadWritePaths` drop-in:
+
+```bash
+systemctl enable --now web-vault-sync@personal web-vault-sync@work
+```
+
+One profile must never point at multiple vault folders. See [`docs/MULTI_VAULT.md`](../../docs/MULTI_VAULT.md).
+
 ## Docker
 
 Build from the repository root so workspace dependencies are available:

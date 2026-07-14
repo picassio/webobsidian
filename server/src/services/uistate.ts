@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { config } from '../config.js';
+import { currentVaultContext } from './vault-context.js';
 
 /**
  * Persisted UI/workspace state (open tabs, active note, expanded folders, panel
@@ -10,19 +11,22 @@ import { config } from '../config.js';
  * localStorage. Single-user app → one shared state file.
  */
 
-const FILE = path.join(config.dataDir, 'uistate.json');
+function uiStateFile(): string {
+  return path.join(currentVaultContext()?.dataDir ?? config.dataDir, 'uistate.json');
+}
 
 export async function readUiState(): Promise<Record<string, unknown>> {
   try {
-    return JSON.parse(await fs.readFile(FILE, 'utf8'));
+    return JSON.parse(await fs.readFile(uiStateFile(), 'utf8'));
   } catch {
     return {};
   }
 }
 
 export async function writeUiState(state: Record<string, unknown>): Promise<void> {
-  await fs.mkdir(config.dataDir, { recursive: true });
-  const tmp = `${FILE}.tmp-${randomBytes(4).toString('hex')}`;
+  const file = uiStateFile();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${randomBytes(4).toString('hex')}`;
   await fs.writeFile(tmp, JSON.stringify(state, null, 2));
-  await fs.rename(tmp, FILE);
+  await fs.rename(tmp, file);
 }

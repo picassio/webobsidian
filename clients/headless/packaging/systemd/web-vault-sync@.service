@@ -1,0 +1,42 @@
+[Unit]
+Description=WebObsidian revision-safe synchronization for vault profile %i
+Documentation=https://github.com/picassio/webobsidian/blob/main/docs/MULTI_VAULT.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=web-vault-sync
+Group=web-vault-sync
+StateDirectory=web-vault-sync-%i
+StateDirectoryMode=0700
+EnvironmentFile=-/etc/web-vault-sync/%i/environment
+LoadCredential=sync-token:/etc/web-vault-sync/%i/token
+ExecStart=/usr/bin/env web-vault-sync --config-dir /var/lib/web-vault-sync-%i watch
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/web-vault-sync-%i
+# Required per-profile drop-in:
+# /etc/systemd/system/web-vault-sync@<profile>.service.d/vault.conf
+# [Service]
+# ReadWritePaths=/srv/<vault-path>
+
+[Install]
+WantedBy=multi-user.target

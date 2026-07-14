@@ -12,6 +12,7 @@ import {
   type SyncEvent,
   type SyncLocalAdapter,
 } from '@picassio/sync-core';
+import { vaultHeaders } from './vault-selection';
 
 export { OrderedSyncClient as BrowserSyncEngine };
 export type { SyncConnectionStatus } from '@picassio/sync-core';
@@ -73,7 +74,7 @@ export class HttpSyncTransport implements SyncClientTransport {
     for (const part of created.missingParts) {
       const start = part * chunkSize;
       const response = await fetch(`${this.base}/blob-uploads/${encodeURIComponent(created.uploadId)}/${part}`, {
-        method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/octet-stream' },
+        method: 'PUT', credentials: 'include', headers: vaultHeaders({ 'content-type': 'application/octet-stream' }),
         body: blob.slice(start, Math.min(blob.size, start + chunkSize)),
       });
       if (!response.ok) throw new Error(`blob_part_upload_failed: ${response.status}`);
@@ -81,7 +82,7 @@ export class HttpSyncTransport implements SyncClientTransport {
     await this.json(`/blob-uploads/${encodeURIComponent(created.uploadId)}/complete`, { method: 'POST', body: '{}' });
   }
   async fileText(event: SyncEvent): Promise<string | null> {
-    const response = await fetch(`${this.base}/files/${encodeURIComponent(event.entryId)}?revision=${event.revision}`, { credentials: 'include' });
+    const response = await fetch(`${this.base}/files/${encodeURIComponent(event.entryId)}?revision=${event.revision}`, { credentials: 'include', headers: vaultHeaders() });
     if (!response.ok) throw new Error(`file_download_failed: ${response.status}`);
     const type = response.headers.get('content-type') ?? '';
     if (!type.startsWith('text/') && !/\.(md|markdown|txt|json|css|js|ts|tsx|jsx|html|xml|yaml|yml|csv|svg)$/i.test(event.path)) return null;
@@ -90,7 +91,7 @@ export class HttpSyncTransport implements SyncClientTransport {
   private async json(path: string, init: RequestInit = {}) {
     const response = await fetch(`${this.base}${path}`, {
       credentials: 'include', ...init,
-      headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+      headers: vaultHeaders({ 'content-type': 'application/json', ...(init.headers ?? {}) }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: { code?: string; message?: string } };

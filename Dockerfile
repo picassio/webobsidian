@@ -38,10 +38,10 @@ ENV PORT=8787 \
     HOST=0.0.0.0 \
     DATA_DIR=/data \
     VAULT_PATH=/vault \
-    ALLOWED_ROOTS=/vault \
+    ALLOWED_ROOTS=/vault,/vaults \
     NODE_OPTIONS=--max-old-space-size=4096
 
-VOLUME ["/vault", "/data"]
+VOLUME ["/vault", "/vaults", "/data"]
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

@@ -4,7 +4,7 @@
 > Protocol 1.0 · This file records evidence; it does not waive an open gate.
 
 This is the explicit audit map for PRD FR-13, PRD Definition of Done (DoD) 8–14, and
-`IMPLEMENTATION_PLAN.md` phases 31–40. **PASS** means the stated requirement has direct, current evidence.
+`IMPLEMENTATION_PLAN.md` phases 31–41. **PASS** means the stated requirement has direct, current evidence.
 **PARTIAL** means implementation evidence exists but a required platform/publication review is missing.
 **BLOCKED** means an external prerequisite is unavailable. Stable release is forbidden while any row is not PASS.
 
@@ -44,10 +44,22 @@ build locally.
 | 34 — API/auth/blob | **PASS** | Pairing/revocation, immutable manifests, ordered changes/acks, resumable uploads, operation batches, health/metrics, HTTPS/CSRF/rate/path defenses, wake-only WebSocket. API/security/E2E tests pass. |
 | 35 — browser | **PASS** | httpOnly device cookie, strict durable IndexedDB state, per-document generation-safe saves, offline queue/catch-up, conflict center, attachment transfer, and production two-browser E2E. |
 | 36 — native plugin | **PARTIAL** | M36.1–M36.9 implementation/release work, public `@picassio/sync-core`, plugin 0.1.12, and the full deployed real-Linux lifecycle/file-operation/editor-safety matrix are complete. | M36.7 mobile physical lifecycle, M36.8 Windows/macOS/mobile matrix, and M36.10 Community review remain open. |
-| 37 — headless | **PARTIAL** | CLI/daemon, modes, watcher, conflict/doctor/reset, public npm package plus registry-origin systemd/sidecar/reinstall, two-client E2E, 1 GiB, installed-state upgrade and amd64/arm64 evidence complete. | Real macOS execution remains open. |
+| 37 — headless | **PARTIAL** | CLI/daemon, modes, watcher, conflict/doctor/reset, public npm package plus registry-origin systemd/sidecar/reinstall, two-client E2E, 1 GiB, installed-state upgrade and amd64/arm64 evidence complete. A real multi-file run exposed a concurrent upload-completion race in published 0.1.0; source now serializes drains and preserves newer same-path markers, with regressions. | Publish/upgrade-verify the headless patch and run real macOS execution. |
 | 38 — Git transition | **PASS** | Backup-only authority, explicit import/restore, legacy hard gate, migration backup prerequisite, LFS separation, bounded retry and drills/tests. |
 | 39 — hardening/operations | **PASS** | Existing-vault migration, 10k/50k/reconnect/1 GiB benchmarks, compaction/retention, crash/ENOSPC/corruption/skew/symlink tests, observability, and backup/recovery runbooks/drills. |
 | 40 — release/support | **BLOCKED** | M40.1 technical preview and M40.5 public headless npm/registry-origin Linux systemd-sidecar validation are complete. Stable workflow has its npm credential, fails closed on version alignment, runs both E2Es, publishes npm with provenance, then creates the GitHub release. | Independent private-alpha evidence, public mobile/client matrix, Community acceptance, real unavailable platforms, aligned stable versions, and final stable tag are outstanding. |
+
+## Phase 41 — first-class multi-vault evidence
+
+| Gate | Status | Evidence |
+|---|:---:|---|
+| Settings/runtime/API/UI implementation | **PASS (local)** | PRD 1.9, `docs/MULTI_VAULT.md`, settings v4 in-place migration, detached identity-preserving registry, AsyncLocalStorage request context, per-vault runtime/index/watcher/Git/share/workspace state, token/API-key scoping, selector and deep links. |
+| Automated verification | **PASS (local)** | Full root tests pass (core, 92 server, 13 web, 16 headless), plus typecheck/build, OpenAPI/Markdown lint, Compose validation and source Docker build/non-root artifact smoke. Multi-vault tests cover concurrent context/settings/registry writes, independent files/sequences/devices, vault-bound manifest cursor, per-vault doctor, root overlap/symlink and allowlist-escape rejection, immutable migration backup, graceful request drain and no-delete detach/re-register. |
+| Rendered/browser and client E2E | **PASS (local)** | Built SPA registered an empty second vault, switched both directions, kept same-path content isolated, restored per-vault workspace/content after reload and emitted vault-aware URLs. Two source headless profiles paired through one server URL to different vaults and independently reached cursor 1 with clean doctors. Forged vault headers did not override either token; an A-only Agent key received 403 on B. Server restart retained both. |
+| Real-data migration | **PASS (copied production)** | A private copied 9.4 MiB v3 data directory and 4.8 MiB active vault booted under v4 with one healthy runtime, identical protocol vaultId, `settings.json.bak`, and a byte-identical vault before/after. No private paths/content were committed. |
+| Deployment/release | **PARTIAL** | Source-built multi-vault image is deployed on the private production service. Stopped-service backups, stable v3→v4 identity/sequence and byte-identical default-vault verification, rendered two-vault switching, same-path isolation, forged-header token binding, detach/re-register identity, old-build/v3 rollback, forward-v4 restore, full guest reboot, trusted HTTPS, permanent headless sync and clean 637-entry doctor all pass. A mount-source mismatch was caught before clients resumed; authoritative storage was untouched and the unused empty volume was removed. | Commit/review this working tree, run remote CI, record immutable commit/image provenance, then publish and acceptance-test the headless watcher patch. |
+
+Phase 41 does not change Protocol 1.0 client request shapes. It is not part of the current immutable/public evidence until a commit, CI run and deployment record are added.
 
 ## Exact external blockers and required access
 

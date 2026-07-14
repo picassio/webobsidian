@@ -1,9 +1,9 @@
-let disconnect: (deviceId: string) => void = () => {};
+let disconnect: (deviceId: string, vaultId?: string) => void = () => {};
 
-export function registerSyncWebSocketDisconnect(handler: (deviceId: string) => void): void {
+export function registerSyncWebSocketDisconnect(handler: (deviceId: string, vaultId?: string) => void): void {
   disconnect = handler;
 }
 
-export function disconnectSyncWebSockets(deviceId: string): void {
-  disconnect(deviceId);
+export function disconnectSyncWebSockets(deviceId: string, vaultId?: string): void {
+  disconnect(deviceId, vaultId);
 }

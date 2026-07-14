@@ -8,7 +8,8 @@ import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { asyncHandler } from '../middleware/error.js';
 import * as vault from '../services/vault.js';
-import { getActiveShare } from '../services/shares.js';
+import { findActiveShareVault, getActiveShare } from '../services/shares.js';
+import { enterVault } from '../services/vault-context.js';
 import { isUnlocked } from './shares.js';
 import { renderNoteHtml, metaDescription, firstImage, escapeHtml } from '../services/renderhtml.js';
 import { renderCanvasHtml, canvasDescription, canvasFirstImage, canvasViewerScript } from '../services/rendercanvas.js';
@@ -70,6 +71,11 @@ ${inner}
 }
 
 export const sharePageRouter = Router();
+sharePageRouter.use('/:id', asyncHandler(async (req, _res, next) => {
+  const found = await findActiveShareVault(req.params.id);
+  if (found) enterVault(found.context);
+  next();
+}));
 
 sharePageRouter.get(
   '/:id',

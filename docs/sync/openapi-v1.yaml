@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: WebObsidian Sync API
   version: 1.0.0
-  description: Revision-safe file synchronization contract. The roadmap is normative for transaction and conflict semantics.
+  description: Revision-safe file synchronization contract. A device token is bound to one vault; Protocol 1.0 remains unchanged when a server hosts multiple vaults. Web-admin operations select a vault with X-WebObsidian-Vault-Id. The roadmap is normative for transaction and conflict semantics.
   license:
     name: MIT
     identifier: MIT
@@ -15,8 +15,9 @@ paths:
   /pairing-codes:
     post:
       operationId: createPairingCode
-      summary: Create a single-use pairing code (web administrator only)
+      summary: Create a single-use pairing code for the selected vault (web administrator only)
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       requestBody:
         required: true
         content:
@@ -28,8 +29,9 @@ paths:
   /browser-devices:
     post:
       operationId: createBrowserDevice
-      summary: Create an httpOnly-cookie browser identity without exposing its device credential
+      summary: Create a vault-scoped httpOnly-cookie browser identity without exposing its device credential
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       requestBody:
         required: true
         content:
@@ -57,8 +59,9 @@ paths:
   /browser-device/upgrade:
     post:
       operationId: upgradeLegacyBrowserCredential
-      summary: One-time rotation of a legacy IndexedDB token into an httpOnly browser cookie
+      summary: One-time rotation of a legacy IndexedDB token into a vault-scoped httpOnly browser cookie
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       requestBody:
         required: true
         content:
@@ -75,8 +78,9 @@ paths:
   /browser-device/logout:
     post:
       operationId: clearBrowserDeviceCookie
-      summary: Clear this browser's httpOnly sync credential
+      summary: Clear this browser's selected-vault httpOnly sync credential
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       responses:
         '204': { description: Browser device cookie cleared }
         default: { $ref: '#/components/responses/Error' }
@@ -246,8 +250,9 @@ paths:
   /devices:
     get:
       operationId: listDevices
-      summary: List paired devices (web administrator only)
+      summary: List paired devices for the selected vault (web administrator only)
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       responses:
         '200': { description: Devices, content: { application/json: { schema: { $ref: './protocol-v1.schema.json#/definitions/DevicesResponse' } } } }
         default: { $ref: '#/components/responses/Error' }
@@ -257,6 +262,7 @@ paths:
       summary: Revoke a paired device (web administrator only)
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: '#/components/parameters/VaultId' }
         - { name: deviceId, in: path, required: true, schema: { type: string } }
       responses:
         '204': { description: Device revoked }
@@ -264,16 +270,18 @@ paths:
   /health:
     get:
       operationId: getSyncHealth
-      summary: Read journal/revision health (web administrator only)
+      summary: Read selected-vault journal/revision health (web administrator only)
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       responses:
         '200': { description: Healthy or degraded sync subsystem }
         default: { $ref: '#/components/responses/Error' }
   /metrics:
     get:
       operationId: syncPrometheusMetrics
-      summary: Export administrator-authenticated Prometheus sync metrics
+      summary: Export selected-vault administrator-authenticated Prometheus sync metrics
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       responses:
         '200':
           description: Prometheus 0.0.4 text exposition (sequence/index/device lag, operations, latency, transfer/dedup, recovery mode)
@@ -284,12 +292,20 @@ paths:
   /doctor:
     get:
       operationId: runSyncDoctor
-      summary: Run non-repairing journal, revision, blob, and filesystem diagnostics (web administrator only)
+      summary: Run selected-vault non-repairing journal, revision, blob, and filesystem diagnostics (web administrator only)
       security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/VaultId' }]
       responses:
         '200': { description: Sync doctor report without secrets or content }
         default: { $ref: '#/components/responses/Error' }
 components:
+  parameters:
+    VaultId:
+      name: X-WebObsidian-Vault-Id
+      in: header
+      required: false
+      description: Stable selected vault ID; omission selects the server default for web-admin requests. Device-token requests always use the token-bound vault.
+      schema: { type: string, minLength: 16, maxLength: 128 }
   securitySchemes:
     deviceToken:
       type: http
@@ -298,7 +314,7 @@ components:
       type: apiKey
       in: cookie
       name: wo_sync_device
-      description: HttpOnly, Secure outside loopback, SameSite=Strict; browser scripts never receive the token.
+      description: Vault-scoped HttpOnly, Secure outside loopback, SameSite=Strict; browser scripts never receive the token. The unscoped legacy cookie remains accepted for the migrated vault.
     sessionCookie:
       type: apiKey
       in: cookie

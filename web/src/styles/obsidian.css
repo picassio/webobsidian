@@ -326,7 +326,9 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   display: flex; align-items: center; gap: 6px; padding: 8px 10px;
   border-top: 1px solid var(--bg-modifier-border); flex-shrink: 0; font-size: 13px; color: var(--text-muted);
 }
-.vault-footer .vault-name { font-weight: 600; color: var(--text-normal); display: flex; align-items: center; gap: 6px; }
+.vault-footer .vault-name { min-width: 0; font-weight: 600; color: var(--text-normal); display: flex; align-items: center; gap: 6px; }
+.vault-footer .vault-name select { min-width: 0; max-width: 170px; border: 0; background: transparent; color: var(--text-normal); font: inherit; cursor: pointer; text-overflow: ellipsis; }
+.vault-footer .vault-name select:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
 .vault-footer .grow { flex: 1; }
 .vault-footer button { border: 0; background: transparent; color: var(--text-faint); cursor: pointer;
   width: 26px; height: 26px; border-radius: var(--radius-s); display: grid; place-items: center; }

@@ -1,9 +1,13 @@
 # Central Sync Operations Runbook
 
-Central Sync is the only live-vault writer when `settings.sync.enabled=true`. Git is backup/version history only.
+Each registered vault has an independent Central Sync authority. Central Sync is the only live-vault writer when
+that vault's `sync.enabled=true`. Git is backup/version history only.
 Never repair a live vault with `git reset`, `git checkout`, direct copy, or an editor behind the coordinator.
 
 ## Routine checks
+
+For admin web requests, send `X-WebObsidian-Vault-Id` to select a vault; omission selects the default. `/healthz`
+reports all registered runtimes and fails when any one is read-only.
 
 - `GET /api/sync/v1/health` (administrator session): authoritative sequence, derived-index lag, device lag,
   operation outcomes/latency, transfer deduplication, drift repairs, and threshold alerts.
@@ -31,8 +35,15 @@ must not contain tokens, pairing codes, content, absolute paths, or remote URLs 
 Take a crash-consistent backup while the service is stopped (preferred), or snapshot both volumes atomically:
 
 - the complete vault, including `.trash` and `.git` if used;
-- the complete `data/sync/` tree (identity, journal, transactions, revisions, blobs, bases, conflicts, devices);
+- the complete data directory: legacy `data/sync/` plus every `data/vaults/<vaultId>/sync/` namespace
+  (identity, journal, transactions, revisions, blobs, bases, conflicts, devices);
 - `data/settings.json` and the deployment's secret material/credential store.
+
+For Compose, inspect the live container mounts and confirm `/vault`, `/vaults`, and `/data` resolve to the intended
+persistent sources before backup and before clients resume. Set `DATA_HOST_PATH` when host-visible data snapshots are
+required; do not assume a deployment-local override survived a source replacement.
+
+See [Multiple vaults](../MULTI_VAULT.md) for registry, systemd-profile and v3→v4 migration details.
 
 Git alone is not a Central Sync recovery backup: it does not contain device acknowledgements, journal history,
 conflict metadata, trash metadata, or pending transaction intents.
@@ -40,7 +51,7 @@ conflict metadata, trash metadata, or pending transaction intents.
 ## Restore vault plus sync metadata
 
 1. Stop the server and every client. Preserve the failed volumes read-only for forensics.
-2. Restore vault and `data/sync/` from the same snapshot generation; restore settings/secrets with restrictive modes.
+2. Restore every vault root and the complete data directory (`data/sync` plus `data/vaults/*`) from the same snapshot generation; restore settings/secrets with restrictive modes.
 3. Start one server only. It validates checksums, replays WAL intents, and either becomes healthy or enters read-only
    mode. Never delete a transaction intent merely to make startup pass.
 4. Run sync doctor. Compare the latest sequence and sampled SHA-256 values with backup records.

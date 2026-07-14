@@ -1,46 +1,66 @@
 import { getSettings } from './settings.js';
 import { sync } from './git.js';
 import { redactUrlCreds } from '../lib/redact.js';
+import { currentVaultContext, runInVault, type VaultContext } from './vault-context.js';
 
-/** Periodic auto-sync when enabled in settings (PRD FR-4). */
-let timer: NodeJS.Timeout | null = null;
-let running = false;
-let failureCount = 0;
-let retryAfter = 0;
-
-export function startAutoSync(): void {
-  if (timer) clearInterval(timer);
-  // Re-evaluate settings each tick so toggling takes effect without restart.
-  timer = setInterval(tick, 30_000);
+interface AutoSyncState {
+  timer: NodeJS.Timeout;
+  running: boolean;
+  failureCount: number;
+  retryAfter: number;
+  lastRun: number | null;
+  context: VaultContext;
 }
 
-async function tick(): Promise<void> {
-  if (running) return;
-  const s = await getSettings();
-  if (!s.git.enabled || !s.git.autoSync || !s.git.remote) return;
-  if (Date.now() < retryAfter) return;
-  const intervalMs = Math.max(s.git.intervalSec, 60) * 1000;
-  const last = lastRun ?? 0;
-  if (Date.now() - last < intervalMs) return;
-  running = true;
+const states = new Map<string, AutoSyncState>();
+
+/** Start one independent periodic Git backup loop for the selected vault. */
+export function startAutoSync(context = currentVaultContext()): void {
+  if (!context || states.has(context.vaultId)) return;
+  const state: AutoSyncState = {
+    timer: setInterval(() => void runInVault(context, () => tick(state)), 30_000),
+    running: false,
+    failureCount: 0,
+    retryAfter: 0,
+    lastRun: null,
+    context,
+  };
+  state.timer.unref();
+  states.set(context.vaultId, state);
+}
+
+export function stopAutoSync(vaultId: string): void {
+  const state = states.get(vaultId);
+  if (!state) return;
+  clearInterval(state.timer);
+  states.delete(vaultId);
+}
+
+async function tick(state: AutoSyncState): Promise<void> {
+  if (state.running) return;
+  const settings = await getSettings();
+  if (!settings.git.enabled || !settings.git.autoSync || !settings.git.remote) return;
+  if (Date.now() < state.retryAfter) return;
+  const intervalMs = Math.max(settings.git.intervalSec, 60) * 1000;
+  if (Date.now() - (state.lastRun ?? 0) < intervalMs) return;
+  state.running = true;
   try {
-    const res = await sync();
-    lastRun = Date.now();
-    if (res.ok) {
-      failureCount = 0; retryAfter = 0;
-      console.log(`[git-backup] ${s.sync.enabled ? 'backup' : 'legacy sync'} ok:`, res.log.join(' | '));
+    const result = await sync();
+    state.lastRun = Date.now();
+    if (result.ok) {
+      state.failureCount = 0;
+      state.retryAfter = 0;
+      console.log(`[git-backup] vault=${state.context.vaultId} ${settings.sync.enabled ? 'backup' : 'legacy sync'} ok:`, result.log.join(' | '));
     } else {
-      failureCount += 1;
-      retryAfter = Date.now() + Math.min(60 * 60_000, 30_000 * 2 ** Math.min(failureCount, 7));
-      console.warn('[git-backup] not-ok; retry scheduled:', res.log.join(' | '));
+      state.failureCount += 1;
+      state.retryAfter = Date.now() + Math.min(60 * 60_000, 30_000 * 2 ** Math.min(state.failureCount, 7));
+      console.warn(`[git-backup] vault=${state.context.vaultId} not-ok; retry scheduled:`, result.log.join(' | '));
     }
-  } catch (e: any) {
-    failureCount += 1;
-    retryAfter = Date.now() + Math.min(60 * 60_000, 30_000 * 2 ** Math.min(failureCount, 7));
-    console.warn('[git-backup] failed; retry scheduled:', redactUrlCreds(e.message));
+  } catch (error) {
+    state.failureCount += 1;
+    state.retryAfter = Date.now() + Math.min(60 * 60_000, 30_000 * 2 ** Math.min(state.failureCount, 7));
+    console.warn(`[git-backup] vault=${state.context.vaultId} failed; retry scheduled:`, redactUrlCreds(error instanceof Error ? error.message : String(error)));
   } finally {
-    running = false;
+    state.running = false;
   }
 }
-
-let lastRun: number | null = null;

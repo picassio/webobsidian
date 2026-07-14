@@ -1,4 +1,5 @@
 import type { SyncEvent, SyncOperation } from '@picassio/sync-core';
+import { getActiveVaultId, getLegacyVaultId } from './vault-selection';
 
 export interface BrowserDeviceState {
   deviceId: string;
@@ -66,7 +67,12 @@ type KvValue = BrowserDeviceState | SyncOperation | LocalApplyIntent | PendingAt
 
 export class IndexedDbSyncPersistence implements SyncPersistence {
   private database: Promise<IDBDatabase> | null = null;
-  constructor(private readonly name = 'webobsidian-sync-v1') {}
+  private readonly name: string;
+  constructor(name?: string) {
+    const vaultId = getActiveVaultId();
+    const legacyVaultId = getLegacyVaultId();
+    this.name = name ?? (!vaultId || vaultId === legacyVaultId ? 'webobsidian-sync-v1' : `webobsidian-sync-v1-${vaultId}`);
+  }
 
   async getDevice(): Promise<BrowserDeviceState | null> {
     const stored = await this.get('device') as (BrowserDeviceState & { token?: string }) | null;

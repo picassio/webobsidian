@@ -11,6 +11,7 @@ import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
+import { withVaultQuery } from './vault-selection';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -1896,7 +1897,7 @@ const EMPHASIS_CLASS: Record<string, string> = {
 const hidden = Decoration.replace({});
 
 function attachmentUrl(target: string): string {
-  return `/api/files/content?path=${encodeURIComponent(target)}`;
+  return withVaultQuery(`/api/files/content?path=${encodeURIComponent(target)}`);
 }
 
 function buildDecorations(view: EditorView): DecorationSet {
