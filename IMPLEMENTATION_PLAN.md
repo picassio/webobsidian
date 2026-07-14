@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.11 in progress: normalize Default vault under /vaults/default and fix create-vault spacing; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-14 (M41.11 complete/deployed: Default vault normalized under /vaults/default with alias/rollback/byte proof and corrected create-vault spacing; M36.10 Community review pending)
 
 ---
 
@@ -647,11 +647,19 @@ Cập nhật lần cuối: 2026-07-14 (M41.11 in progress: normalize Default vau
 - [x] M41.10 User-created empty vaults (PRD 1.12): Settings creates an isolated empty server vault from a name only;
       server chooses a safe managed allowlist root, creates a restricted unique directory and registers atomically,
       while preserving separate register-existing and no-delete/unregister semantics; unit/E2E/rendered/deployment proof.
-- [~] M41.11 Default vault normalization (PRD 1.13): name default record `Default`, canonical root `/vaults/default`,
+- [x] M41.11 Default vault normalization (PRD 1.13): name default record `Default`, canonical root `/vaults/default`,
       retain `/vault` as same-source compatibility alias, migrate production with stopped backup/byte proof, and align
       Create vault action spacing with the surrounding settings groups.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (Default root normalization + spacing): PRD 1.13/commit `ecfa31c` names fresh/migrated initial
+  records `Default`, uses canonical `/vaults/default`, mounts the same default source at compatibility `/vault`, and
+  adds Compose contracts for parent/canonical/alias mounts. Production stopped-service backup and before/after content
+  manifest prove 674 files/688 entries/4,258,206 bytes unchanged (`a64d7f01…e1d`); old runtime booted against the
+  normalized root before forward restore. A stale deployment-local alias override was caught by mount assertions and
+  corrected before clients resumed. Rendered UI shows `Default` at `/vaults/default`; Create vault action spacing is
+  visually separated from Register existing. Full local tests/typecheck/docs/Compose checks and CI 29334476573 pass;
+  all three production vaults are healthy, Pi PARA remains isolated and clean, and its timer is active.
 - 2026-07-14 (user-created empty vault + isolated pi-para): PRD 1.12/commit `06cdbf7` add **Create empty vault**
   by name in Settings. Server atomically chooses a safe managed allowlist parent, creates a unique mode-0750 slug
   directory, starts an isolated ready runtime, and cleans only its newly-created empty directory on registration failure;
