@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.10 in progress: owner-created empty vault from Web UI with safe managed-root provisioning; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-14 (M41.10 complete/deployed: owner-created empty vaults from Web UI; pi-para moved to isolated pi-para-claude-3; M36.10 Community review pending)
 
 ---
 
@@ -644,11 +644,20 @@ Cập nhật lần cuối: 2026-07-14 (M41.10 in progress: owner-created empty v
 - [x] M41.9 Central Sync vault/device control (PRD 1.11): colocated vault dropdown scopes health/pairing/conflicts/
       devices; active connected devices show name/id/last-seen/cursor and explicit Disconnect revocation; revoked
       history is summarized separately. Plugin remains one-vault-token-bound and changes target only by Unpair/new code.
-- [~] M41.10 User-created empty vaults (PRD 1.12): Settings creates an isolated empty server vault from a name only;
+- [x] M41.10 User-created empty vaults (PRD 1.12): Settings creates an isolated empty server vault from a name only;
       server chooses a safe managed allowlist root, creates a restricted unique directory and registers atomically,
       while preserving separate register-existing and no-delete/unregister semantics; unit/E2E/rendered/deployment proof.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (user-created empty vault + isolated pi-para): PRD 1.12/commit `06cdbf7` add **Create empty vault**
+  by name in Settings. Server atomically chooses a safe managed allowlist parent, creates a unique mode-0750 slug
+  directory, starts an isolated ready runtime, and cleans only its newly-created empty directory on registration failure;
+  register-existing remains separate. Unit coverage validates path/mode/empty/ready state; multi-vault E2E creates a
+  third managed vault and survives restart; browser E2E requires the button. Full local server/web/type/build/docs and
+  managed multi-vault E2E pass; CI 29328809689 passes both jobs. Source-built production/mount/render verification passes.
+  Per user direction, the accidentally re-paired Pi PARA device was revoked from default, a new UI/API-created
+  `pi-para-claude-3` vault was paired and bootstrapped independently to sequence/cursor 638 with 632 checked entries,
+  zero doctor issues/pending/error/index lag, while default has no active device and Desktop Obsidian stays empty at 0.
 - 2026-07-14 (Central Sync vault/device controls): PRD 1.11 and commit `3b2c81b` add a colocated vault dropdown
   inside Central Sync; health, code creation, conflicts and devices remount under the selected vault. The main device
   list now shows only active connections with name, stable ID, last-seen and cursor plus explicit Disconnect/revoke;
