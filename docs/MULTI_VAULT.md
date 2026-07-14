@@ -53,6 +53,11 @@ retained so registering the same real path again restores its original `vaultId`
 Sync Protocol 1.0 and client commands are unchanged. Create a pairing code while the intended vault is active, then
 pair the plugin/headless client normally. The pairing code and resulting token choose the vault.
 
+Use a one-to-one mapping: one local Obsidian vault is a replica of one registered server vault. An installed plugin does
+not register the local directory as a new server vault automatically. Register and select an isolated server vault before
+pairing each unrelated local vault; pairing unrelated local directories to the same server vault intentionally converges
+them into one namespace and is not a multi-vault workflow.
+
 A headless profile remains one-vault-only. Use a separate config directory and systemd unit instance per local vault:
 
 ```ini

@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry live with automated review pending on normal plugin release 0.1.14)
+Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; production now enforces/documented one-local-vault ↔ one-server-vault operation; M36.10 review pending on 0.1.14)
 
 ---
 
@@ -639,6 +639,12 @@ Cập nhật lần cuối: 2026-07-14 (Phase 41 complete; M36.10 Community entry
       evidence also passes.
 
 ### Nhật ký tiến độ
+- 2026-07-14 (isolated desktop vault onboarding): clarified that every unrelated local Obsidian vault must pair to a
+  separately registered server vault; plugin pairing never auto-registers or merges vault identities. Backed up the live
+  registry, registered an empty isolated `Desktop Obsidian` vault, and verified sequence 0, zero index lag, writable
+  health, rendered selector switching, and one-use pairing-code creation through trusted HTTPS. The original vault
+  remained sequence 761 and healthy. A fresh authenticated browser shows both healthy; stale browser sessions should
+  hard-refresh or sign out/in before pairing.
 - 2026-07-14 (Community popout review response 0.1.14): automated review warned twice against global `document`
   in foreground lifecycle registration. Replaced visibility/focus handling with Obsidian `activeDocument` and
   `activeWindow`, bumped source/tag to `26cd75e`/0.1.14, and changed README/policy language from prerelease to
