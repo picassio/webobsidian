@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-16 (M42.1 implementation and deterministic full-plugin 10k performance gates pass; release preparation awaits orchestrator review)
+Cập nhật lần cuối: 2026-07-16 (M42.1 reviewed, published and deployed: 46.24× 10k bootstrap, live progress, core 0.1.4/plugin 0.1.16; M36.10 Community review pending)
 
 ---
 
@@ -664,6 +664,12 @@ Cập nhật lần cuối: 2026-07-16 (M42.1 implementation and deterministic fu
       after orchestrator review—do not publish, tag, deploy or mutate production.
 
 ### Nhật ký tiến độ
+- 2026-07-16 (M42.1 publication + deployment): independent orchestrator review fixed phase honesty, retry resume,
+  concurrent Sync-now serialization, atomic terminal-batch removal, and old-server rejection/client-sequence safety.
+  Public `@picassio/sync-core@0.1.4` registry verification/audit pass. Normal non-prerelease plugin 0.1.16 source/tag
+  `04cbbad` passed CI 29488800939/release CI 29489144624; release assets exactly match source. WebObsidian `e6c9b75`
+  passed CI 29488645269 and was source-built/deployed after stopped backup `c240d5f2…0453`; production handshake
+  advertises `ordered-batch-stop-v1`, all vaults remain healthy, and isolated Pi PARA resumed cleanly at cursor 949.
 - 2026-07-16 (M42.1 full-plugin performance gate): added a reproducible benchmark that extracts the actual
   pre-change plugin at `121e03b` and runs both real `main.ts` scan paths through persistence, uploads, durable enqueue,
   core publication and reconciliation on the same deterministic 10k × 35-byte fixture. Orchestrator review found and
