@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-16 (M42.1 reviewed, published and deployed: 46.24× 10k bootstrap, live progress, core 0.1.4/plugin 0.1.16; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-16 (M43.1 verified: stale-parent bootstrap HTTP 500 fix; plugin 0.1.17/server deployment pending; M36.10 Community review pending)
 
 ---
 
@@ -663,7 +663,22 @@ Cập nhật lần cuối: 2026-07-16 (M42.1 reviewed, published and deployed: 4
       regression/benchmark plus batch/upload crash-fault tests; prepare only a normal non-prerelease plugin release
       after orchestrator review—do not publish, tag, deploy or mutate production.
 
+## Phase 43 — Bootstrap parent ordering recovery — FR-13
+- [x] M43.1 Fix production HTTP 500 during deep-vault bootstrap: if a parent pending marker changes during bounded
+      preparation, keep every descendant marker durable until the exact parent is durably prepared; never enqueue a
+      child create ahead of unresolved parent work. Server create/mkdir validates the physical parent and returns a
+      canonical non-500 `invalid_request` without journal/transaction ambiguity. Regression tests cover blocked child,
+      successful retry parent→child, and missing-parent coordinator cleanup. Publish a new immutable plugin version and
+      deploy the server only after full checks.
+
 ### Nhật ký tiến độ
+- 2026-07-16 (M43.1 stale-parent production fix): live logs for an interrupted large TLPSN bootstrap showed repeated
+  HTTP 500 `ENOENT` while installing a file beneath a directory whose marker had changed during preparation. The
+  server stayed writable/zero-lag; both affected credentials were already revoked, 573 authoritative events remained
+  healthy, and doctor found only expected unreferenced uploaded blobs—no journal/filesystem divergence. A failing
+  regression proved the child operation could commit while its stale parent marker remained. Plugin store now blocks
+  descendants until parent preparation is durable, then commits parent→child on retry; server maps any residual
+  missing-parent create/mkdir to canonical `invalid_request` with no journal event or retained transaction.
 - 2026-07-16 (M42.1 publication + deployment): independent orchestrator review fixed phase honesty, retry resume,
   concurrent Sync-now serialization, atomic terminal-batch removal, and old-server rejection/client-sequence safety.
   Public `@picassio/sync-core@0.1.4` registry verification/audit pass. Normal non-prerelease plugin 0.1.16 source/tag

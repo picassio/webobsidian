@@ -71,6 +71,20 @@ test('coordinator commits create-modify-rename-delete as revisioned journal even
   assert.deepEqual(await fs.readdir(path.join(data, 'sync', 'transactions')), []);
 });
 
+test('coordinator reports a missing parent as a canonical rejection without an ambiguous transaction', async (t) => {
+  const { data, coordinator } = await setup(t);
+
+  await assert.rejects(
+    () => coordinator.apply(create('Missing/Child.md', 'child'), actor),
+    (error: unknown) => error instanceof CoordinatorError
+      && error.code === 'invalid_request'
+      && error.message === 'parent directory does not exist',
+  );
+
+  assert.equal(await new JournalStore(data).latestSequence(), 0);
+  assert.deepEqual(await fs.readdir(path.join(data, 'sync', 'transactions')), []);
+});
+
 test('coordinator returns durable result for an exact retry and rejects reused client sequence', async (t) => {
   const { data, coordinator } = await setup(t);
   const operation = create('A.md', 'a');

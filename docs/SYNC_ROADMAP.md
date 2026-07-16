@@ -344,7 +344,11 @@ Implementation contract:
   compare against the indexed projection, and collect metadata-only work in bounded checkpoints. An unchanged path
   causes no plugin-state write and no network request. Startup-discovered work may be recomputed after a crash;
   live Vault events still persist their marker before debounce/yield. Before publication, every generated operation
-  is durable and its source marker is removed only after that enqueue succeeds. A persistence adapter may atomically
+  is durable and its source marker is removed only after that enqueue succeeds. If a parent marker changes while
+  descendants are being prepared, every descendant remains pending until that exact parent marker is durably converted;
+  no child create may publish ahead of unresolved parent work. The server defensively reports a missing parent as a
+  canonical rejection rather than leaking a filesystem HTTP 500, and never invents unrevisioned implicit parents.
+  A persistence adapter may atomically
   remove all terminal results from one acknowledged batch; a crash before that write replays the unchanged batch and
   a crash after it cannot resurrect only part of the removed set.
 - **Bounded concurrency:** hashing/reading and blob transfer may overlap, but memory and network concurrency are

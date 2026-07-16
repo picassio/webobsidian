@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.14 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Phiên bản: 1.15 · Cập nhật: 2026-07-16 · Trạng thái: Draft
+> Changelog 1.15 (parent-before-child bootstrap recovery): một pending marker của thư mục cha thay đổi trong khi
+> upload không được phép để operation con publish trước cha; marker con giữ durable và retry sau khi cha được enqueue.
+> Server kiểm tra parent directory trước create/mkdir và trả canonical `invalid_request` thay vì HTTP 500/`ENOENT`.
+> Không tự tạo parent ẩn, không mất operation/note, và local/server partial bootstrap hội tụ lại qua manifest/retry.
 > Changelog 1.14 (initial-pairing throughput + visible progress): initial reconciliation phải lập kế hoạch theo
 > batch thay vì persist/network tuần tự từng path; `OrderedSyncClient` publish tối đa 100 operation/request theo
 > đúng thứ tự khi server quảng bá stop-on-failure capability (server cũ giữ 1/request), xử lý durable từng result/

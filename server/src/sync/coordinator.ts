@@ -1115,6 +1115,7 @@ export class SyncCoordinator {
     switch (event.operation) {
       case 'create':
         await assertAbsent(target);
+        await this.assertParentDirectory(target);
         await this.atomicInstall(this.intents.contentPath(intent, 'new')!, target);
         break;
       case 'modify':
@@ -1122,6 +1123,7 @@ export class SyncCoordinator {
         await this.atomicInstall(this.intents.contentPath(intent, 'new')!, target);
         break;
       case 'mkdir':
+        await this.assertParentDirectory(target);
         await fs.mkdir(target, { recursive: false, mode: 0o755 });
         await fsyncDirectory(path.dirname(target));
         break;
@@ -1151,6 +1153,12 @@ export class SyncCoordinator {
         await fsyncDirectory(path.dirname(trash));
         break;
       }
+    }
+  }
+
+  private async assertParentDirectory(target: string): Promise<void> {
+    if (await kindIfExists(path.dirname(target)) !== 'directory') {
+      throw new CoordinatorError('invalid_request', 'parent directory does not exist');
     }
   }
 
