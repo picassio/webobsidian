@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-16 (M43.1 verified: stale-parent bootstrap HTTP 500 fix; plugin 0.1.17/server deployment pending; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-16 (M43.1 published/deployed: stale-parent bootstrap HTTP 500 fixed in plugin 0.1.17/server bac48c5; M36.10 Community review pending)
 
 ---
 
@@ -678,7 +678,10 @@ Cập nhật lần cuối: 2026-07-16 (M43.1 verified: stale-parent bootstrap HT
   healthy, and doctor found only expected unreferenced uploaded blobs—no journal/filesystem divergence. A failing
   regression proved the child operation could commit while its stale parent marker remained. Plugin store now blocks
   descendants until parent preparation is durable, then commits parent→child on retry; server maps any residual
-  missing-parent create/mkdir to canonical `invalid_request` with no journal event or retained transaction.
+  missing-parent create/mkdir to canonical `invalid_request` with no journal event or retained transaction. Plugin
+  source/tag `b9d04ee`/0.1.17 passed CI 29494786617 and release CI 29495259554; immutable release assets match source.
+  Server `bac48c5` passed CI 29494739932 and was source-built/deployed after stopped backup `472ff22f…30ec`; mounts,
+  health and zero lag pass, no post-deploy ENOENT/500 recurred, and Pi PARA resumed cleanly at cursor 991.
 - 2026-07-16 (M42.1 publication + deployment): independent orchestrator review fixed phase honesty, retry resume,
   concurrent Sync-now serialization, atomic terminal-batch removal, and old-server rejection/client-sequence safety.
   Public `@picassio/sync-core@0.1.4` registry verification/audit pass. Normal non-prerelease plugin 0.1.16 source/tag
