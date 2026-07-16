@@ -304,6 +304,88 @@ after `snapshotSequence`, preventing a bootstrap race. Bootstrap supports a dry-
 confirmation before destructive replacement. It checkpoints after bounded batches so it can resume after failure.
 A client does not advance or acknowledge its cursor until corresponding local writes and local state are durable.
 
+#### 5.5.1 Initial-pairing performance and progress contract
+
+Current profiling identifies three multiplicative bottlenecks rather than a protocol/server limit:
+
+1. `OrderedSyncClient.flushLoop` sends one operation per `/operations` request although Protocol 1.0 already permits
+   100, so request latency and the 600-request data bucket dominate a large local bootstrap.
+2. The plugin scans/hashes paths one at a time, persists the complete plugin state for each discovered marker and
+   operation, then serializes upload → enqueue → publish per path. Rewriting metadata arrays and awaiting every
+   persistence/network step makes reconciliation proportional to paths times storage/network latency.
+3. Blob create/part/complete calls and files are fully serial. The status bar exposes only a coarse state/lag, so a
+   correct long bootstrap appears stalled and diagnostics cannot distinguish scanning, transfer, publication or apply.
+
+Implementation contract:
+
+- **Ordered publication:** read one durable queue snapshot, sort by positive `clientSequence`, and submit contiguous
+  slices of at most `min(100, server-advertised maxOperationsPerBatch)` only when the server advertises
+  `ordered-batch-stop-v1`; older Protocol 1.0 servers safely remain at one operation/request. The capability guarantees
+  that after the first non-success the server returns `dependency_failed` without executing later rows, preventing a
+  higher accepted client sequence from stranding an earlier retained rejection. Request/response shapes do not change.
+  Never reorder across slices. Validate that each result corresponds to exactly one submitted
+  `idempotencyKey`; a missing, duplicate or unknown result is a retryable failure and leaves uncertain operations.
+- **Per-result durability:** process results in submitted order. For `accepted`/`merged`, finish the adapter's
+  idempotent committed projection before durable queue removal. For `conflict`, durably record/surface the conflict
+  before removal. `rejected` and `dependency_failed` remain queued. Reconcile every returned result because the
+  non-atomic server may already have committed later independent rows, then stop before submitting another slice if
+  the slice contains a rejected/dependency-failed result. Thus a crash after response but between removals safely
+  retries only the retained suffix with the same client sequences/idempotency keys.
+- **Local-before-remote:** startup, wake and polling attempt all publishable durable local slices before fetching
+  newer remote bytes. A stopped slice may then enter the existing conflict/reconciliation flow; it must never be
+  bypassed by silently applying a remote overwrite.
+- **Safe startup lifecycle:** after retained-intent recovery, fetch the immutable manifest, then scan/checkpoint local
+  paths in `beforeBootstrap` before any manifest entry is materialized. The adapter protects both durable pending-path
+  markers and queued operations. After bootstrap and cursor persistence, `beforeInitialFlush` converts retained markers
+  through bounded uploads into durable operations; core publishes them before `beforeInitialCatchUp` allows remote
+  catch-up. Awaited callbacks report recovery completion, per-result queue removal, and normal event durability only
+  after their corresponding persistent transition; callback failure follows the normal offline/retry path.
+- **Reconciliation plan:** inventory excluded-safe paths in deterministic parent-before-child/canonical-path order,
+  compare against the indexed projection, and collect metadata-only work in bounded checkpoints. An unchanged path
+  causes no plugin-state write and no network request. Startup-discovered work may be recomputed after a crash;
+  live Vault events still persist their marker before debounce/yield. Before publication, every generated operation
+  is durable and its source marker is removed only after that enqueue succeeds. A persistence adapter may atomically
+  remove all terminal results from one acknowledged batch; a crash before that write replays the unchanged batch and
+  a crash after it cannot resurrect only part of the removed set.
+- **Bounded concurrency:** hashing/reading and blob transfer may overlap, but memory and network concurrency are
+  explicit. The plugin default and acceptance cap is 4 concurrent file uploads; each file's resumable parts remain
+  ordered and hash-verified. Upload completion may occur out of order, but client sequence allocation/enqueue and
+  operation publication follow deterministic plan order. No full-vault content buffer is allowed.
+- **Crash and safety invariants:** restart rescans incomplete inventory/checkpoints, resumes server upload state, and
+  idempotently republishes retained operations. Cursor/ack still advance only after durable local apply intents.
+  Revision/base checks, server conflict outcomes, one-vault token binding, server/client excludes, echo suppression,
+  unsaved-editor deferral, and SHA-256 verification are unchanged. Plugin state may contain sync metadata, hashes,
+  blob references and durable operation descriptors, but never note bytes/text; progress and diagnostics never contain
+  token/authorization data or private paths.
+
+Live progress is an in-memory observation, not protocol or authority state. Phase units are fixed so every surface
+reports the same meaning:
+
+| Phase | Completed item | Bytes |
+|---|---|---|
+| `recovering` | durable apply intent recovered | bytes are unknown/absent |
+| `manifest` | manifest entry received | metadata bytes are unknown/absent |
+| `scanning` | eligible local path inventoried and hashed when required | local file payload bytes inspected |
+| `uploading` | file whose required blob upload completed or deduplicated | verified payload bytes available remotely |
+| `publishing` | operation result durably reconciled | payload bytes referenced by reconciled operations |
+| `applying` | remote event durably materialized and its apply intent removed | downloaded/materialized payload bytes |
+| `finalizing` | final cursor/ack/conflict-refresh step completed | bytes are unknown/absent |
+
+```text
+phase = recovering | manifest | scanning | uploading | publishing | applying | finalizing
+completedItems, totalItems?      # non-negative; completed is monotonic within a phase
+completedBytes, totalBytes?      # payload bytes, not wire/compression estimates
+queuedOperations, conflicts
+startedAt, updatedAt, resumed
+```
+
+Unknown totals stay absent until discovered; they are never displayed as zero. Phase order is monotonic except a
+retry may restart the current phase with `resumed=true`. Emit the first snapshot within 1 second of starting and
+coalesce UI updates to at most four per second while guaranteeing an update at each phase transition/completion.
+Status bar uses a concise phase plus count/bytes; Settings shows the full current snapshot and last completed summary;
+redacted diagnostics exports the same aggregate fields and request counts, never content or paths. Terminal
+`synced/offline/conflict/error/disabled` remains connection state, orthogonal to the active progress phase.
+
 ### 5.6 Reconnect and offline replay
 
 1. Client records the last durably applied server sequence outside the vault.
@@ -653,6 +735,8 @@ not an administrator and may be compromised, so server validation remains mandat
 
 Metrics/logical counters:
 
+- Current bootstrap phase, item/byte totals and completions, operation/blob request counts, elapsed time and resumed
+  flag; aggregates only, with no note content or private paths.
 - Current sequence and journal lag per device.
 - Connected/active/revoked devices.
 - Operations accepted, deduplicated, rejected, and conflicted.
@@ -706,11 +790,33 @@ Operator surfaces:
 
 Initial targets, validated before beta:
 
+- A deterministic 10k-path unchanged plugin fixture performs zero operation/blob requests and zero per-path durable
+  writes; compare median of three runs against the pre-change sequential baseline on the same machine.
+- A deterministic 10k small-file local bootstrap uses at most `ceil(N/100)` operations requests, never exceeds four
+  concurrent file uploads, reports file/byte/request totals, and is at least 3× faster by three-run median on the same
+  machine/network. Rate-limit wait time is reported separately rather than hidden from elapsed time.
+- Progress appears within 1 second, refreshes at least every 250 ms while advancing, remains monotonic per phase, and
+  reaches exact totals; retry/restart evidence shows `resumed=true` without false completion.
+- Batch fault tests cover response loss, crash after each per-result durable removal, missing/reordered result rows,
+  conflict/rejection in the middle, and prove ordered idempotent convergence with local-before-remote behavior.
+- Plugin fault tests cover crash during scan/upload/checkpoint, exclude enforcement, unsaved editor, one-vault token,
+  diagnostics redaction/no paths, and prove no note content is written to plugin state.
 - 10k notes / 50k total files manifest pagination without loading all content.
 - Incremental no-change handshake/catch-up under 500 ms on LAN after connection.
 - Text changes visible to active clean clients within 2 seconds under normal conditions.
 - Bounded memory while transferring a 1 GB attachment.
 - Journal replay and server restart recovery without O(vault content bytes) full reads in the common case.
+
+Current M42.1 evidence (2026-07-16): plugin fault tests cover scan/checkpoint interruption followed by restart without
+false completion, upload failure with durable marker retention, stale prepared work, atomic marker-to-operation commit,
+and pending-path protection during bootstrap. Core tests cover recovery/hook ordering and operation/result durability.
+`cd ../central-vault-sync && timeout 2400s npm run benchmark:bootstrap` extracts the actual pre-change plugin sources at
+`121e03b`, invokes each version's real `main.ts` vault scan plus store, adapter, upload/enqueue, core publication and
+reconciliation pipeline against the identical deterministic 10k × 35-byte fixture, and asserts the gates. Three runs
+measured a 403,598.88 ms baseline median versus 8,727.62 ms optimized median (**46.24×**); every optimized run published
+10,000 operations in exactly **100 operation requests**, uploaded 350,000 bytes, and reduced plugin-state writes from
+50,002 to 302. The benchmark's fixed 1 ms loopback operation latency is reported separately, and phase timing logs make
+long scan/persistence/publication runs visible.
 
 ## 14. Delivery phases, dependencies, and estimates
 
@@ -729,8 +835,9 @@ Estimates are engineering effort, not calendar commitments, and assume one exper
 | 38 | Git backup-only transition and explicit import | 33–35 | 1–2 weeks | Git cannot implicitly mutate a Central Sync vault. |
 | 39 | Scale, fault injection, security, migration, operations | 32–38 | 3–4 weeks | NFR gates pass; no unresolved critical/high data-loss/security issue. |
 | 40 | Technical preview → alpha → beta → stable/publication | 35–39 | 2–3 weeks + review | Artifacts published, plugin accepted, recovery/upgrade drills pass. |
+| 42 | Fast initial pairing + live progress | 36, 39 | 1 week + review | 10k/fault gates pass; normal plugin release is prepared, not published, pending orchestrator review. |
 
-Expected total is **20–31 engineer-weeks**, with phases 36, 37, and 38 parallelizable after phase 35. A
+Expected total is **21–32 engineer-weeks**, with phases 36, 37, and 38 parallelizable after phase 35. A
 Markdown-only technical preview is allowed only as an explicitly labeled pre-stable artifact after phases 31–35;
 it does not satisfy FR-13 or any stable acceptance criterion. Full stable includes arbitrary attachments, mobile
 foreground catch-up, the headless client, Git transition, and community plugin publication.
@@ -803,6 +910,7 @@ corresponding `IMPLEMENTATION_PLAN.md` milestones in the same change.
 | JSON recovery/scale/doctor | FR-13 Storage; NFR reliability/performance | M32.2–M32.9, M39.1–M39.7 |
 | Security/privacy/transport | NFR Bảo mật; FR-13 Device auth; DoD 12 | M31.6, M34.8–M34.9, M39.5 |
 | Protocol/client compatibility | NFR Sync compatibility | M31.4, M31.7, M34.2, M36.8, M37.8 |
+| Initial-pairing throughput/progress without weaker safety | FR-13 plugin; NFR Sync performance | M42.1 |
 | Publication and stable release | DoD 14 | M36.9–M36.10, M40.1–M40.6 |
 
 FR-13 is complete only when every phase-40 stable gate and PRD DoD 8–14 has fresh evidence. A passing server

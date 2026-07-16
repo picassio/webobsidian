@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.13 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Phiên bản: 1.14 · Cập nhật: 2026-07-14 · Trạng thái: Draft
+> Changelog 1.14 (initial-pairing throughput + visible progress): initial reconciliation phải lập kế hoạch theo
+> batch thay vì persist/network tuần tự từng path; `OrderedSyncClient` publish tối đa 100 operation/request theo
+> đúng thứ tự khi server quảng bá stop-on-failure capability (server cũ giữ 1/request), xử lý durable từng result/
+> acknowledged batch; plugin dùng upload concurrency có giới hạn. Status bar, Settings và
+> diagnostics hiện phase/count/bytes trực tiếp nhưng không persist note content/path riêng tư. Mọi tối ưu giữ nguyên
+> Protocol 1.0 request shape, local-before-remote, revision/idempotency/conflict/crash safety, one-vault token binding,
+> excludes và unsaved-editor protection; chỉ chuẩn bị normal non-prerelease plugin release sau orchestrator review.
 > Changelog 1.13 (normalized default vault layout): default vault hiển thị tên `Default` và canonical container root
 > `/vaults/default`, cùng sibling với mọi managed vault. `/vault` chỉ còn compatibility alias bind cùng source để
 > rollback/legacy settings không mất dữ liệu; migrated default vẫn giữ legacy metadata tại `data/sync`. Production move
@@ -460,7 +467,10 @@ Thiết kế chi tiết và thứ tự triển khai: [`docs/SYNC_ROADMAP.md`](do
   khi revision mới, dirty note vào merge/conflict; workspace/uistate mặc định per-device thay vì mirror toàn cục.
 - **Native Obsidian community plugin:** desktop+mobile, dùng Vault events/API + `requestUrl` + SecretStorage,
   debounce modify, offline queue, echo suppression theo path/hash/revision, foreground catch-up trên mobile,
-  status/conflict UI. Plugin repo riêng, manifest id không chứa `obsidian`; submit bản đầu qua Community directory.
+  status/conflict UI. Initial pairing chạy các phase `recovering → manifest → scanning → uploading → publishing →
+  applying → finalizing`, batch operation tối đa 100 và upload song song có giới hạn; progress count/bytes phải hiện
+  live mà không ghi note content hoặc private path vào plugin state/diagnostics. Plugin repo riêng, manifest id không
+  chứa `obsidian`; submit bản đầu qua Community directory.
 - **Linux headless client:** CLI/daemon dùng chung `sync-core`, lệnh init/pair/sync/watch/status/conflicts/doctor,
   mode bidirectional/pull-only/push-only/one-shot, chạy systemd hoặc sidecar Docker amd64/arm64; cursor/token nằm
   ngoài vault và token file mode 0600/systemd credential.
@@ -497,6 +507,10 @@ Thiết kế chi tiết và thứ tự triển khai: [`docs/SYNC_ROADMAP.md`](do
   clean active client thấy text revision mới trong ≤2s điều kiện bình thường; stream file 1GB với bounded memory.
   Bootstrap transfer không bị throttle ở ngưỡng chỉ ~30 file: data-plane mặc định 600 request/phút/device; Test/
   handshake dùng bucket control riêng để vẫn chẩn đoán được trong lúc upload; 429 luôn có Retry-After và client backoff.
+  Trên fixture 10k path cố định, reconciliation không đổi tạo 0 operation/blob request và không persist theo từng path;
+  local bootstrap có `POST /operations` không quá `ceil(N/100)`, tối đa 4 blob upload đồng thời, và median ≥3× nhanh
+  hơn baseline tuần tự trên cùng máy/mạng (3 lượt, báo cả file/byte/request). Progress đầu tiên hiện trong 1 giây,
+  cập nhật ít nhất mỗi 250ms khi còn tiến triển, count/bytes đơn điệu và đạt đúng total khi hoàn tất.
 - **Sync compatibility**: protocol major version explicit; server hỗ trợ current + previous minor trong rolling
   upgrade; major mismatch fail-safe. Desktop/mobile/headless đều có conformance test chung.
 - **Khả chuyển**: chạy được trên Linux/macOS, ARM & x86.

@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-14 (M41.11 complete/deployed: Default vault normalized under /vaults/default with alias/rollback/byte proof and corrected create-vault spacing; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-16 (M42.1 implementation and deterministic full-plugin 10k performance gates pass; release preparation awaits orchestrator review)
 
 ---
 
@@ -651,7 +651,53 @@ Cập nhật lần cuối: 2026-07-14 (M41.11 complete/deployed: Default vault n
       retain `/vault` as same-source compatibility alias, migrate production with stopped backup/byte proof, and align
       Create vault action spacing with the surrounding settings groups.
 
+## Phase 42 — Fast initial pairing & live progress — FR-13
+- [x] M42.1 Implement PRD 1.14 bootstrap contract: `OrderedSyncClient` publishes ordered contiguous operation batches
+      up to Protocol 1.0/server max 100, validates one result per idempotency key, durably commits/removes each terminal
+      result, stops later slices on rejection/dependency failure, and preserves local-before-remote plus crash replay.
+      Plugin reconciliation must avoid unchanged/per-path persistence and network serialization, use deterministic
+      bounded checkpoints and at most 4 concurrent file uploads without out-of-order client sequences, and expose
+      aggregate `recovering/manifest/scanning/uploading/publishing/applying/finalizing` item/byte progress in status bar,
+      Settings and redacted diagnostics. Preserve request shapes, revisions/idempotency/conflicts, token-vault binding,
+      excludes, unsaved-editor deferral and no note content/private paths in plugin state or diagnostics. Add 10k
+      regression/benchmark plus batch/upload crash-fault tests; prepare only a normal non-prerelease plugin release
+      after orchestrator review—do not publish, tag, deploy or mutate production.
+
 ### Nhật ký tiến độ
+- 2026-07-16 (M42.1 full-plugin performance gate): added a reproducible benchmark that extracts the actual
+  pre-change plugin at `121e03b` and runs both real `main.ts` scan paths through persistence, uploads, durable enqueue,
+  core publication and reconciliation on the same deterministic 10k × 35-byte fixture. Orchestrator review found and
+  fixed three issues before acceptance: publication had occurred while UI still said uploading, retries could not
+  restart the phase model, and old servers could continue later batch rows after a rejection and strand its client
+  sequence. Upload now finishes before visible publication, terminal result sets are atomically removed per acknowledged
+  batch, retries explicitly resume from recovery, and batching is capability-gated on server stop-after-failure support.
+  Three-run median improved from 403,598.88 ms to 8,727.62 ms (46.24×); each optimized run used exactly 100 operation
+  requests, uploaded 350,000 bytes, and reduced plugin-state writes from 50,002 to 302. Regression, compatibility,
+  server route, full plugin, and benchmark checks pass; release/publication/deployment remain separate reviewed steps.
+- 2026-07-16 (M42.1 safe core lifecycle rework): added a backward-compatible optional `OrderedSyncClient`
+  lifecycle argument. Startup now exposes awaited recovery completion, pre-bootstrap local scan/checkpoint,
+  pre-initial-flush marker conversion, pre-catch-up, and post-durable operation/event callbacks without changing
+  Protocol 1.0 request shapes. Tests prove recovery → manifest fetch → local scan → bootstrap/cursor → bounded local
+  preparation → local-first publication → remote catch-up ordering, failure stops before unsafe later transitions,
+  and observer exceptions cannot roll durable queue/cursor transitions back. Plugin progress/performance/fault gates
+  and orchestrator review remain open; no release, publish, tag, deploy, or production mutation was performed.
+- 2026-07-16 (M42.1 plugin progress/fault rework, still not release-ready): the plugin now uses the core lifecycle
+  barriers for recovery → manifest fetch → scan/checkpoint → protected bootstrap → bounded upload/enqueue → batched
+  publication → catch-up, with live post-durable operation/event counts. Aggregate snapshots preserve unknown totals,
+  operation/blob request counts, elapsed time, and resumed retries; phase transitions/completion render immediately and
+  advancing updates coalesce to 250 ms. Bootstrap protects both queued-operation and pending-path local work. Fresh
+  plugin `npm run check` passes 28 tests, including scan/checkpoint interruption and restart without false completion,
+  upload failure marker retention, pending-path bootstrap protection, and progress resume semantics. This entry's
+  then-open full-plugin performance gate is superseded by the measured M42.1 evidence above; no release, publish, tag,
+  deploy, or production mutation was performed.
+- 2026-07-16 (independent M42.1 QA, superseded progress findings): fresh root test/typecheck/build/docs/OpenAPI and
+  plugin `npm run check` passed. Core fault coverage included reordered results, response loss, and every per-result
+  durable removal boundary; a controlled 10k publication benchmark measured 100 batched requests versus 10,000
+  sequential requests and an 89.34× three-run median speedup. Full-plugin performance evidence remained open.
+- 2026-07-14 (fast bootstrap contract started): PRD 1.14 and the Sync Roadmap now document the measured bottlenecks,
+  phase/count/byte progress model, max-100 ordered publication, per-result crash durability, bounded upload concurrency,
+  safety invariants and deterministic acceptance gates. M42.1 remains in progress until core/plugin implementation,
+  regression/performance evidence and orchestrator review are complete; no release/publish/deploy action was taken.
 - 2026-07-14 (Default root normalization + spacing): PRD 1.13/commit `ecfa31c` names fresh/migrated initial
   records `Default`, uses canonical `/vaults/default`, mounts the same default source at compatibility `/vault`, and
   adds Compose contracts for parent/canonical/alias mounts. Production stopped-service backup and before/after content

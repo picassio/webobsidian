@@ -104,8 +104,9 @@ test('pair, handshake, ticket, protocol rejection and revocation use canonical c
   }, paired.token);
   assert.equal(batchResponse.status, 200);
   const batch = await batchResponse.json() as { results: Array<{ status: string; errorCode?: string }> };
-  assert.deepEqual(batch.results.map((result) => result.status), ['accepted', 'rejected', 'dependency_failed', 'accepted']);
+  assert.deepEqual(batch.results.map((result) => result.status), ['accepted', 'rejected', 'dependency_failed', 'dependency_failed']);
   assert.equal(batch.results[1]?.errorCode, 'path_collision');
+  assert.equal(await getSyncCoordinator().entryByPath('Independent'), null);
 
   const fileResponse = await fetch(`${base}/api/sync/v1/files/${routeFile.entryId}?revision=1`, {
     headers: { authorization: `Bearer ${paired.token}`, range: 'bytes=0-0' },

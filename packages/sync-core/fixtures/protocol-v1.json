@@ -22,7 +22,7 @@
       "manifestTtlSec": 900,
       "uploadTtlSec": 86400
     },
-    "capabilities": ["resumable-blobs", "conflict-copy", "diff3"]
+    "capabilities": ["resumable-blobs", "conflict-copy", "diff3", "ordered-batch-stop-v1"]
   },
   "manifestPage": {
     "protocolVersion": "1.0",

@@ -126,7 +126,7 @@ syncRouter.post('/handshake', requireSyncDevice, deviceControlRateLimit, asyncHa
     minimumRetainedSequence: state.minimumRetainedSequence,
     readOnly: state.readOnly,
     limits: DEFAULT_LIMITS,
-    capabilities: ['manifest-v1', 'changes-v1', 'operations-v1', 'blob-range-v1', 'resumable-blob-v1', 'conflicts-v1'],
+    capabilities: ['manifest-v1', 'changes-v1', 'operations-v1', 'ordered-batch-stop-v1', 'blob-range-v1', 'resumable-blob-v1', 'conflicts-v1'],
   });
 }));
 
@@ -194,22 +194,28 @@ syncRouter.post('/operations', requireSyncDevice, deviceRateLimit, asyncHandler(
   }
   const outcomes = new Map<string, 'success' | 'failed'>();
   const results = [];
+  let batchStopped = false;
   for (const operation of parsed.data.operations) {
-    const dependencyFailed = operation.dependsOn?.some((key) => outcomes.get(key) !== 'success') ?? false;
+    const dependencyFailed = batchStopped
+      || (operation.dependsOn?.some((key) => outcomes.get(key) !== 'success') ?? false);
     if (dependencyFailed) {
       getSyncCoordinator().recordDependencyFailure();
       results.push({ idempotencyKey: operation.idempotencyKey, status: 'dependency_failed' as const, errorCode: 'dependency_failed' });
       outcomes.set(operation.idempotencyKey, 'failed');
+      batchStopped = true;
       continue;
     }
     try {
       const result = await getSyncCoordinator().apply(operation, { type: 'device', id: req.syncDevice!.deviceId });
       results.push(result);
-      outcomes.set(operation.idempotencyKey, result.status === 'accepted' || result.status === 'merged' ? 'success' : 'failed');
+      const success = result.status === 'accepted' || result.status === 'merged';
+      outcomes.set(operation.idempotencyKey, success ? 'success' : 'failed');
+      if (!success) batchStopped = true;
     } catch (error) {
       if (error instanceof CoordinatorError) {
         results.push({ idempotencyKey: operation.idempotencyKey, status: 'rejected' as const, errorCode: error.code });
         outcomes.set(operation.idempotencyKey, 'failed');
+        batchStopped = true;
         continue;
       }
       throw error;

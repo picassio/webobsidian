@@ -13,6 +13,9 @@ Obsidian, browser, or credential storage itself. A client must durably record an
 materialization and advance/acknowledge its cursor only afterward. Wake and polling work flush durable local
 operations before pulling remote events. Adapters that maintain a separate dirty-path marker can call `enqueue()`,
 durably clear that marker, and then call `flush()` so the server echo cannot race the local preparation boundary.
+Servers advertising `ordered-batch-stop-v1` allow ordered publication in protocol-sized batches; older servers
+remain at one operation/request. Optional lifecycle observers expose safe bootstrap/progress boundaries only after
+the corresponding persistence transition.
 
 - Protocol and OpenAPI: <https://github.com/picassio/webobsidian/tree/main/docs/sync>
 - Source: <https://github.com/picassio/webobsidian/tree/main/packages/sync-core>
