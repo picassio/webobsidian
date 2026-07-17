@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.19 emits unique, single-subject SLSA provenance per release asset; Community rescan pending)
+Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.20 uses a lightweight tag plus unique single-subject SLSA provenance; Community rescan pending)
 
 ---
 
@@ -672,6 +672,14 @@ Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.19 
       deploy the server only after full checks.
 
 ### Nhật ký tiến độ
+- 2026-07-17 (M36.10 lightweight-tag provenance remediation): Community automation rejected 0.1.19 despite
+  unique, single-subject, strictly GitHub-verified statements. The remaining material difference from a passing
+  comparison release was Git tag type: every Central Vault Sync review release used an annotated tag whose ref points
+  to a tag-object digest, while provenance records the dereferenced commit; the passing release uses a lightweight tag
+  whose ref points directly to that commit. This is a known third-party SLSA verifier failure mode. Immutable 0.1.20
+  source/tag `6316e3f` uses a verified lightweight `commit` ref, and release CI now fails closed on annotated tags.
+  CI 29556135065/release CI 29556165105 pass. Every asset is unique, byte-matches source, has one single-subject
+  statement, and passes strict verification with source digest `6316e3f`. Community rescan remains pending.
 - 2026-07-17 (M36.10 per-asset provenance remediation): Community automation also rejected 0.1.18. Comparing a
   passing Community plugin's bundles exposed the compatibility difference: its verified assets each had a separate
   single-subject provenance statement, while 0.1.18 used one cryptographically valid three-subject statement. Immutable
