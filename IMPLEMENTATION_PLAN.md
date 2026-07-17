@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-16 (M43.1 published/deployed: stale-parent bootstrap HTTP 500 fixed in plugin 0.1.17/server bac48c5; M36.10 Community review pending)
+Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.18 uses dedicated SLSA provenance for all release assets; Community review pending)
 
 ---
 
@@ -672,6 +672,13 @@ Cập nhật lần cuối: 2026-07-16 (M43.1 published/deployed: stale-parent bo
       deploy the server only after full checks.
 
 ### Nhật ký tiến độ
+- 2026-07-17 (M36.10 release-attestation remediation): Community automation reported cryptographic attestation
+  failures for 0.1.17 `main.js` and `styles.css`. Independent `gh attestation verify` succeeded, but the workflow used
+  the generic `actions/attest@v4` surface and omitted `manifest.json`. Immutable 0.1.18 source/tag `48b9ae3` now uses
+  the Community-tested dedicated `actions/attest-build-provenance@v4` action and attests all three distributed assets
+  in the same build/release job. Node 20/22/24 CI 29553602648 and release CI 29553637063 pass. Downloaded assets
+  byte-match the tagged build; strict SLSA v1 verification passes for repository, workflow identity, GitHub-hosted
+  runner, and all three digests. Await refreshed Community automation; no existing release asset was replaced.
 - 2026-07-16 (M43.1 stale-parent production fix): live logs for an interrupted large TLPSN bootstrap showed repeated
   HTTP 500 `ENOENT` while installing a file beneath a directory whose marker had changed during preparation. The
   server stayed writable/zero-lag; both affected credentials were already revoked, 573 authoritative events remained
