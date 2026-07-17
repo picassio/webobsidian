@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.18 uses dedicated SLSA provenance for all release assets; Community review pending)
+Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.19 emits unique, single-subject SLSA provenance per release asset; Community rescan pending)
 
 ---
 
@@ -672,6 +672,14 @@ Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.18 
       deploy the server only after full checks.
 
 ### Nhật ký tiến độ
+- 2026-07-17 (M36.10 per-asset provenance remediation): Community automation also rejected 0.1.18. Comparing a
+  passing Community plugin's bundles exposed the compatibility difference: its verified assets each had a separate
+  single-subject provenance statement, while 0.1.18 used one cryptographically valid three-subject statement. Immutable
+  0.1.19 source/tag `dbc3b19` invokes `actions/attest-build-provenance@v4` separately for `main.js`, `manifest.json`,
+  and `styles.css`; release-specific JS/CSS markers also guarantee unique digests so older-tag statements cannot enter
+  lookup. Node 20/22/24 CI 29555628918 and release CI 29555659196 pass. Each downloaded asset byte-matches source,
+  has exactly one statement containing exactly its own name, and passes strict SLSA/repository/workflow/hosted-runner
+  verification. Community still shows cached 0.1.18 while the 0.1.19 rescan is pending; acceptance is not yet claimed.
 - 2026-07-17 (M36.10 release-attestation remediation): Community automation reported cryptographic attestation
   failures for 0.1.17 `main.js` and `styles.css`. Independent `gh attestation verify` succeeded, but the workflow used
   the generic `actions/attest@v4` surface and omitted `manifest.json`. Immutable 0.1.18 source/tag `48b9ae3` now uses
