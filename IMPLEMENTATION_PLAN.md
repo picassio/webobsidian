@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.20 uses a lightweight tag plus unique single-subject SLSA provenance; Community rescan pending)
+Cập nhật lần cuối: 2026-07-17 (M36.10 blocked by confirmed Community scorecard false positive on strictly verified plugin 0.1.20; escalation required)
 
 ---
 
@@ -672,6 +672,14 @@ Cập nhật lần cuối: 2026-07-17 (M36.10 review remediation: plugin 0.1.20 
       deploy the server only after full checks.
 
 ### Nhật ký tiến độ
+- 2026-07-17 (M36.10 confirmed scorecard false positive): Community automation rejected 0.1.20 after scanning the
+  lightweight-tag release. No remaining artifact-side ambiguity reproduces: each affected digest has exactly one
+  single-subject statement; release bytes and GitHub asset digests match; tag ref, signer digest and source digest are
+  all commit `6316e3f`; source ref is exactly `refs/tags/0.1.20`; certificate SAN is the exact repository workflow/tag;
+  issuer is GitHub Actions OIDC; runner is GitHub-hosted; and strict JSON verification returns exactly one verified
+  result for both `main.js` and `styles.css`. Do not delete/unpublish immutable failed releases or publish another
+  speculative version. Preserve 0.1.20 as evidence and escalate the scorecard false positive through Obsidian's
+  official `#plugin-dev` channel/developer dashboard before any further release.
 - 2026-07-17 (M36.10 lightweight-tag provenance remediation): Community automation rejected 0.1.19 despite
   unique, single-subject, strictly GitHub-verified statements. The remaining material difference from a passing
   comparison release was Git tag type: every Central Vault Sync review release used an annotated tag whose ref points
